@@ -14,16 +14,16 @@ export interface ParsedRoute {
 // Use a custom event system instead of relying on hash changes
 const ROUTE_CHANGE_EVENT = "custom-route-change"
 
-let currentRoute: ParsedRoute = { path: "/tables", params: {} }
+let currentRoute: ParsedRoute = { path: "/entities", params: {} }
 
 export function parseRoute(hash: string): ParsedRoute {
   try {
     // Remove the # if present
     const cleanHash = hash.startsWith("#") ? hash.slice(1) : hash
 
-    // If empty, default to /tables
+    // If empty, default to /entities
     if (!cleanHash) {
-      return { path: "/tables", params: {} }
+      return { path: "/entities", params: {} }
     }
 
     // Split path and query string
@@ -43,12 +43,12 @@ export function parseRoute(hash: string): ParsedRoute {
     }
 
     return {
-      path: pathPart || "/tables",
+      path: pathPart || "/entities",
       params,
     }
   } catch (error) {
     console.warn("Failed to parse route:", error)
-    return { path: "/tables", params: {} }
+    return { path: "/entities", params: {} }
   }
 }
 
@@ -72,7 +72,7 @@ export function buildRoute(path: string, params?: RouteParams): string {
     return route
   } catch (error) {
     console.warn("Failed to build route:", error)
-    return "/tables"
+    return "/entities"
   }
 }
 
@@ -91,10 +91,10 @@ export function useRouter() {
         return initialRoute
       } catch (error) {
         console.warn("Failed to get initial route:", error)
-        return { path: "/tables", params: {} }
+        return { path: "/entities", params: {} }
       }
     }
-    return { path: "/tables", params: {} }
+    return { path: "/entities", params: {} }
   })
 
   React.useEffect(() => {

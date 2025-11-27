@@ -35,7 +35,7 @@ export default function Page() {
         if (!token && currentPath !== "/login") {
           navigate("/login")
         } else if (token && currentPath === "/login") {
-          navigate("/tables")
+          navigate("/entities")
         }
       } catch (error) {
         console.warn("Failed to handle route change:", error)
@@ -46,7 +46,7 @@ export default function Page() {
   const handleLogin = (newToken: string) => {
     try {
       setToken(newToken)
-      navigate("/tables")
+      navigate("/entities")
     } catch (error) {
       console.warn("Failed to handle login:", error)
     }
@@ -74,7 +74,7 @@ export default function Page() {
   }
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem storageKey="mantis-admin-theme" disableTransitionOnChange>
       <AppStateProvider>
         {route.path === "/login" || !token ? (
           <LoginForm onLogin={handleLogin} />
