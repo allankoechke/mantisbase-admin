@@ -1,14 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCw, TestTube, Globe } from "lucide-react"
+import { RefreshCw, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Badge } from "@/components/ui/badge"
 import type { ApiClient, AppSettings } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAppState, type AppMode } from "@/lib/app-state"
@@ -24,16 +22,77 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
   const { toast } = useToast()
   const { mode, setMode } = useAppState()
   const [formData, setFormData] = React.useState<AppSettings | null>(null)
-  const [isLoading, setIsLoading] = React.useState(false)
-  const [hasChanges, setHasChanges] = React.useState(false)
+  const [originalData, setOriginalData] = React.useState<AppSettings | null>(null)
+  const [isLoading, setIsLoading] = React.useState<Record<string, boolean>>({})
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   React.useEffect(() => {
     if (settings) {
-      setFormData({ ...settings, mode })
-      setHasChanges(false)
+      const data = { ...settings, mode }
+      setFormData(data)
+      setOriginalData(data)
     }
   }, [settings, mode])
+
+  // Track changes per card section
+  const getCardChanges = (cardType: "general" | "file" | "features"): boolean => {
+    if (!formData || !originalData) return false
+    
+    if (cardType === "general") {
+      return (
+        formData.appName !== originalData.appName ||
+        formData.baseUrl !== originalData.baseUrl
+      )
+    }
+    
+    if (cardType === "file") {
+      return (
+        formData.maxFileSize !== originalData.maxFileSize ||
+        formData.sessionTimeout !== originalData.sessionTimeout ||
+        formData.adminSessionTimeout !== originalData.adminSessionTimeout
+      )
+    }
+    
+    if (cardType === "features") {
+      return (
+        formData.maintenanceMode !== originalData.maintenanceMode ||
+        formData.allowRegistration !== originalData.allowRegistration ||
+        formData.emailVerificationRequired !== originalData.emailVerificationRequired
+      )
+    }
+    
+    return false
+  }
+
+  const resetCardChanges = (cardType: "general" | "file" | "features") => {
+    if (!formData || !originalData) return
+    
+    if (cardType === "general") {
+      setFormData({
+        ...formData,
+        appName: originalData.appName,
+        baseUrl: originalData.baseUrl,
+      })
+    }
+    
+    if (cardType === "file") {
+      setFormData({
+        ...formData,
+        maxFileSize: originalData.maxFileSize,
+        sessionTimeout: originalData.sessionTimeout,
+        adminSessionTimeout: originalData.adminSessionTimeout,
+      })
+    }
+    
+    if (cardType === "features") {
+      setFormData({
+        ...formData,
+        maintenanceMode: originalData.maintenanceMode,
+        allowRegistration: originalData.allowRegistration,
+        emailVerificationRequired: originalData.emailVerificationRequired,
+      })
+    }
+  }
 
   const handleInputChange = (field: keyof AppSettings, value: any) => {
     if (!formData) return
@@ -42,25 +101,12 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
       ...formData,
       [field]: value,
     })
-    setHasChanges(true)
   }
 
-  const handleModeToggle = (newMode: AppMode) => {
-    setMode(newMode)
-    if (formData) {
-      setFormData({
-        ...formData,
-        mode: newMode,
-      })
-      setHasChanges(true)
-    }
-    onModeChange(newMode, formData?.baseUrl)
-  }
-
-  const handleSave = async () => {
+  const handleSave = async (cardType: "general" | "file" | "features") => {
     if (!formData) return
 
-    setIsLoading(true)
+    setIsLoading({ ...isLoading, [cardType]: true })
     try {
       const updatedSettings = await apiClient.call<AppSettings>("/api/v1/settings/config", {
         method: "PATCH",
@@ -70,18 +116,25 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
       // If the request failed, throw the error here 
       if (updatedSettings?.error?.length > 0) throw updatedSettings.error
 
+      const data = { ...updatedSettings, mode }
+      setFormData(data)
+      setOriginalData(data)
       onSettingsUpdate(updatedSettings)
-      setHasChanges(false)
 
       toast({
         title: "Settings Saved",
-        description: "Application settings have been updated successfully.",
+        description: `${cardType.charAt(0).toUpperCase() + cardType.slice(1)} settings have been updated successfully.`,
         duration: 3000,
       })
     } catch (error) {
       console.error("Failed to update settings:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+      })
     } finally {
-      setIsLoading(false)
+      setIsLoading({ ...isLoading, [cardType]: false })
     }
   }
 
@@ -121,26 +174,42 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">Manage your application configuration and preferences</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant={mode === "TEST" ? "secondary" : "default"} className="flex items-center gap-1.5 px-3 py-1.5">
-            {mode === "TEST" ? <TestTube className="h-3.5 w-3.5" /> : <Globe className="h-3.5 w-3.5" />}
-            {mode} Mode
-          </Badge>
-          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+        </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Settings Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* General Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>General</CardTitle>
-              <CardDescription>Basic application information and configuration</CardDescription>
-            </CardHeader>
+      <div className="space-y-6">
+        {/* General Settings */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>General</CardTitle>
+                <CardDescription>Basic application information and configuration</CardDescription>
+              </div>
+              {getCardChanges("general") && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave("general")}
+                  disabled={isLoading.general}
+                  className="gap-2"
+                >
+                  {isLoading.general ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -180,12 +249,36 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
             </CardContent>
           </Card>
 
-          {/* File & Session Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>File & Sessions</CardTitle>
-              <CardDescription>Configure file upload limits and session timeouts</CardDescription>
-            </CardHeader>
+        {/* File & Session Settings */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>File & Sessions</CardTitle>
+                <CardDescription>Configure file upload limits and session timeouts</CardDescription>
+              </div>
+              {getCardChanges("file") && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave("file")}
+                  disabled={isLoading.file}
+                  className="gap-2"
+                >
+                  {isLoading.file ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
@@ -222,12 +315,36 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
             </CardContent>
           </Card>
 
-          {/* Feature Toggles */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Features</CardTitle>
-              <CardDescription>Enable or disable application features</CardDescription>
-            </CardHeader>
+        {/* Feature Toggles */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Features</CardTitle>
+                <CardDescription>Enable or disable application features</CardDescription>
+              </div>
+              {getCardChanges("features") && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave("features")}
+                  disabled={isLoading.features}
+                  className="gap-2"
+                >
+                  {isLoading.features ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
@@ -269,120 +386,6 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Environment Mode Sidebar */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Environment</CardTitle>
-              <CardDescription>Switch between development and production modes</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <button
-                onClick={() => handleModeToggle("TEST")}
-                className={`w-full text-left rounded-lg border-2 p-4 transition-all ${
-                  mode === "TEST" 
-                    ? "border-primary bg-primary/5" 
-                    : "border-border hover:border-primary/50 hover:bg-muted/50"
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <TestTube className="h-5 w-5 text-blue-600" />
-                      <span className="font-semibold">Test Mode</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Development environment with CORS support
-                    </p>
-                  </div>
-                  {mode === "TEST" && (
-                    <Badge variant="default" className="ml-2">Active</Badge>
-                  )}
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleModeToggle("PROD")}
-                className={`w-full text-left rounded-lg border-2 p-4 transition-all ${
-                  mode === "PROD" 
-                    ? "border-primary bg-primary/5" 
-                    : "border-border hover:border-primary/50 hover:bg-muted/50"
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <Globe className="h-5 w-5 text-green-600" />
-                      <span className="font-semibold">Production Mode</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Production environment on same server
-                    </p>
-                  </div>
-                  {mode === "PROD" && (
-                    <Badge variant="default" className="ml-2">Active</Badge>
-                  )}
-                </div>
-              </button>
-
-              {mode === "TEST" && (
-                <div className="rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4">
-                  <div className="flex items-start gap-2">
-                    <TestTube className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                        Test Mode Active
-                      </p>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-300">
-                        API calls will be made to an external server. Ensure your API server is running and set MANTIS_PORT in environment variables.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button 
-                onClick={handleSave} 
-                disabled={isLoading || !hasChanges}
-                className="w-full"
-                size="lg"
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  "Save Changes"
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (settings) {
-                    setFormData({ ...settings, mode })
-                    setHasChanges(false)
-                  }
-                }}
-                disabled={!hasChanges}
-                className="w-full"
-                size="lg"
-              >
-                Reset Changes
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </div>
   )

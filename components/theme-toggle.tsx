@@ -19,7 +19,7 @@ export function ThemeToggle({ iconOnly = false }: ThemeToggleProps) {
 
   if (!mounted) {
     return (
-      <SidebarMenuButton className={iconOnly ? "h-12 w-full justify-center p-0 mx-0 rounded-none min-w-full" : ""}>
+      <SidebarMenuButton style={iconOnly ? { height: "4rem", minHeight: "4rem" } : undefined} className={iconOnly ? "w-full justify-center p-0 mx-0 rounded-none min-w-full" : ""}>
         <div className="h-6 w-6" />
         {!iconOnly && <span>Theme</span>}
       </SidebarMenuButton>
@@ -36,7 +36,7 @@ export function ThemeToggle({ iconOnly = false }: ThemeToggleProps) {
   const displayTheme = resolvedTheme || "light"
 
   return (
-    <SidebarMenuButton onClick={toggleTheme} className={iconOnly ? "h-12 w-full justify-center p-0 mx-0 rounded-none min-w-full" : ""}>
+    <SidebarMenuButton onClick={toggleTheme} style={iconOnly ? { height: "4rem", minHeight: "4rem" } : undefined} className={iconOnly ? "w-full justify-center p-0 mx-0 rounded-none min-w-full" : ""}>
       {displayTheme === "dark" ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
       {!iconOnly && <span>{displayTheme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
       {iconOnly && <span className="sr-only">{displayTheme === "dark" ? "Switch to Light" : "Switch to Dark"}</span>}

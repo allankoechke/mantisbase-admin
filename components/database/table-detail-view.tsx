@@ -15,6 +15,7 @@ import { EditItemDrawer } from "./edit-item-drawer"
 import { AddItemDrawer } from "./add-item-drawer"
 import { ColumnVisibilityDropdown } from "./column-visibility-dropdown"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "@/lib/router"
 
 interface TableDetailViewProps {
   table: TableMetadata
@@ -38,9 +39,22 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     table.schema.fields?.map((field) => field.name) || [],
   )
   const [isDeleting, setIsDeleting] = React.useState(false)
-  const [filterTerm, setFilterTerm] = React.useState("")
-  const [appliedFilter, setAppliedFilter] = React.useState("")
+  const { route, navigate } = useRouter()
   const { toast } = useToast()
+  
+  // Initialize filter from query params
+  const initialFilter = route.queryParams.filter || ""
+  const [filterTerm, setFilterTerm] = React.useState(initialFilter)
+  const [appliedFilter, setAppliedFilter] = React.useState(initialFilter)
+
+  // Sync filter with query params
+  React.useEffect(() => {
+    const filterFromQuery = route.queryParams.filter || ""
+    if (filterFromQuery !== appliedFilter) {
+      setAppliedFilter(filterFromQuery)
+      setFilterTerm(filterFromQuery)
+    }
+  }, [route.queryParams.filter])
 
   React.useEffect(() => {
     loadTableData()
@@ -86,6 +100,10 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
   const handleFilter = () => {
     setAppliedFilter(filterTerm)
     setCurrentPage(1) // Reset to first page when filtering
+    
+    // Update URL with filter query param
+    const queryParams = filterTerm ? { filter: filterTerm } : {}
+    navigate("/entities/:name", { name: table.name }, queryParams)
   }
 
   const handleFilterKeyPress = (e: React.KeyboardEvent) => {
@@ -213,7 +231,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">
-            Entity <span className="text-primary font-mono">"{table.name}"</span> data
+            Entity <span className="text-primary font-mono italic">'{table.name}'</span> data
           </h2>
         </div>
         <div className="flex gap-2">
@@ -262,6 +280,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
               onClick={() => {
                 setFilterTerm("")
                 setAppliedFilter("")
+                navigate("/entities/:name", { name: table.name }, {})
               }}
               className="h-6 text-xs"
             >

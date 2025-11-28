@@ -8,57 +8,99 @@ export interface RouteParams {
 
 export interface ParsedRoute {
   path: string
-  params: RouteParams
+  pathParams: RouteParams
+  queryParams: RouteParams
 }
 
-// Use a custom event system instead of relying on hash changes
+// Use a custom event system for route changes
 const ROUTE_CHANGE_EVENT = "custom-route-change"
 
-let currentRoute: ParsedRoute = { path: "/entities", params: {} }
+let currentRoute: ParsedRoute = { path: "/entities", pathParams: {}, queryParams: {} }
 
-export function parseRoute(hash: string): ParsedRoute {
+// Parse path params from route pattern (e.g., "/entities/:name" -> { name: "test" })
+function parsePathParams(pattern: string, path: string): RouteParams {
+  const params: RouteParams = {}
+  const patternParts = pattern.split("/")
+  const pathParts = path.split("/")
+
+  if (patternParts.length !== pathParts.length) {
+    return params
+  }
+
+  for (let i = 0; i < patternParts.length; i++) {
+    if (patternParts[i].startsWith(":")) {
+      const paramName = patternParts[i].slice(1)
+      params[paramName] = pathParts[i]
+    }
+  }
+
+  return params
+}
+
+export function parseRoute(pathname: string, search: string = ""): ParsedRoute {
   try {
-    // Remove the # if present
-    const cleanHash = hash.startsWith("#") ? hash.slice(1) : hash
-
-    // If empty, default to /entities
-    if (!cleanHash) {
-      return { path: "/entities", params: {} }
+    // Remove leading slash if present for consistency
+    let cleanPath = pathname.startsWith("/") ? pathname : `/${pathname}`
+    
+    // Remove trailing slash for consistency
+    if (cleanPath.endsWith("/") && cleanPath !== "/") {
+      cleanPath = cleanPath.slice(0, -1)
     }
 
-    // Split path and query string
-    const [pathPart, queryPart] = cleanHash.split("?")
+    // If empty, default to /entities
+    if (!cleanPath || cleanPath === "/") {
+      return { path: "/entities", pathParams: {}, queryParams: {} }
+    }
 
-    // Parse query parameters
-    const params: RouteParams = {}
-    if (queryPart) {
+    // Parse query parameters from search string
+    const queryParams: RouteParams = {}
+    if (search) {
       try {
-        const searchParams = new URLSearchParams(queryPart)
+        const searchParams = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
         for (const [key, value] of searchParams.entries()) {
-          params[key] = value
+          queryParams[key] = value
         }
       } catch (error) {
         console.warn("Failed to parse query parameters:", error)
       }
     }
 
+    // Extract path params based on known route patterns
+    const pathParams: RouteParams = {}
+    
+    // Match /entities/:name pattern
+    const entitiesMatch = cleanPath.match(/^\/entities\/([^/]+)$/)
+    if (entitiesMatch) {
+      pathParams.name = entitiesMatch[1]
+      return { path: "/entities/:name", pathParams, queryParams }
+    }
+
     return {
-      path: pathPart || "/entities",
-      params,
+      path: cleanPath,
+      pathParams,
+      queryParams,
     }
   } catch (error) {
     console.warn("Failed to parse route:", error)
-    return { path: "/entities", params: {} }
+    return { path: "/entities", pathParams: {}, queryParams: {} }
   }
 }
 
-export function buildRoute(path: string, params?: RouteParams): string {
+export function buildRoute(path: string, pathParams?: RouteParams, queryParams?: RouteParams): string {
   try {
     let route = path.startsWith("/") ? path : `/${path}`
 
-    if (params && Object.keys(params).length > 0) {
+    // Replace path params (e.g., /admin/entities/:name -> /admin/entities/test)
+    if (pathParams) {
+      for (const [key, value] of Object.entries(pathParams)) {
+        route = route.replace(`:${key}`, value)
+      }
+    }
+
+    // Add query parameters
+    if (queryParams && Object.keys(queryParams).length > 0) {
       const searchParams = new URLSearchParams()
-      for (const [key, value] of Object.entries(params)) {
+      for (const [key, value] of Object.entries(queryParams)) {
         if (value) {
           searchParams.set(key, value)
         }
@@ -86,15 +128,15 @@ export function useRouter() {
   const [route, setRoute] = React.useState<ParsedRoute>(() => {
     if (typeof window !== "undefined") {
       try {
-        const initialRoute = parseRoute(window.location.hash)
+        const initialRoute = parseRoute(window.location.pathname, window.location.search)
         currentRoute = initialRoute
         return initialRoute
       } catch (error) {
         console.warn("Failed to get initial route:", error)
-        return { path: "/entities", params: {} }
+        return { path: "/entities", pathParams: {}, queryParams: {} }
       }
     }
-    return { path: "/entities", params: {} }
+    return { path: "/entities", pathParams: {}, queryParams: {} }
   })
 
   React.useEffect(() => {
@@ -108,19 +150,9 @@ export function useRouter() {
       }
     }
 
-    const handleHashChange = () => {
-      try {
-        const newRoute = parseRoute(window.location.hash)
-        setRoute(newRoute)
-        currentRoute = newRoute
-      } catch (error) {
-        console.warn("Failed to handle hash change:", error)
-      }
-    }
-
     const handlePopState = () => {
       try {
-        const newRoute = parseRoute(window.location.hash)
+        const newRoute = parseRoute(window.location.pathname, window.location.search)
         setRoute(newRoute)
         currentRoute = newRoute
       } catch (error) {
@@ -130,29 +162,22 @@ export function useRouter() {
 
     // Listen for our custom events
     window.addEventListener(ROUTE_CHANGE_EVENT, handleCustomRouteChange as EventListener)
-
-    // Still listen for hash changes for browser navigation
-    window.addEventListener("hashchange", handleHashChange)
     window.addEventListener("popstate", handlePopState)
 
     return () => {
       window.removeEventListener(ROUTE_CHANGE_EVENT, handleCustomRouteChange as EventListener)
-      window.removeEventListener("hashchange", handleHashChange)
       window.removeEventListener("popstate", handlePopState)
     }
   }, [])
 
-  const navigate = React.useCallback((path: string, params?: RouteParams) => {
+  const navigate = React.useCallback((path: string, pathParams?: RouteParams, queryParams?: RouteParams) => {
     try {
-      const routePath = buildRoute(path, params)
-      const newRoute: ParsedRoute = { path: routePath, params: params || {} }
+      const routePath = buildRoute(path, pathParams, queryParams)
+      const newRoute = parseRoute(routePath.split("?")[0], routePath.includes("?") ? routePath.split("?")[1] : "")
 
-      // Update URL without triggering hash change event
-      const hashValue = `#${routePath}`
-
-      // Use replaceState to avoid adding to history if it's the same route
-      if (window.location.hash !== hashValue) {
-        window.history.pushState(null, "", hashValue)
+      // Update URL using pushState for clean paths
+      if (window.location.pathname + window.location.search !== routePath) {
+        window.history.pushState(null, "", routePath)
       }
 
       // Dispatch our custom event

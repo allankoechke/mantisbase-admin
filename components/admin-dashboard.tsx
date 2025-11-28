@@ -80,9 +80,9 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     [toast],
   )
 
-  const handleUnauthorized = React.useCallback((reason: string | null) => {
+  const handleUnauthorized = React.useCallback((reason?: string | "") => {
     try {
-      setAuthErrorReason(reason)  // Set the auth error string
+      setAuthErrorReason(reason || "")  // Set the auth error string
       setAuthErrorDialog(true)    // Set the auth dialog to open
       handleLogout()
     } catch (error) {
@@ -91,7 +91,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }, [])
 
   const [apiClient, setApiClient] = React.useState(
-    () => new ApiClient(token, handleUnauthorized, showError),
+    () => new ApiClient(token || "", handleUnauthorized, showError),
   )
 
   React.useEffect(() => {
@@ -101,7 +101,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   // Update API client when mode or settings change
   React.useEffect(() => {
-    const newApiClient = new ApiClient(token, handleUnauthorized, showError)
+    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
     setApiClient(newApiClient)
   }, [token, handleUnauthorized, showError])
 
@@ -158,8 +158,8 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }
 
   const handleModeChange = (newMode: AppMode, baseUrl?: string) => {
-    // Update API client with new mode and base URL
-    const newApiClient = new ApiClient(token, handleUnauthorized, newMode, baseUrl, showError)
+    // Update API client when mode changes (mode is handled via app state)
+    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
     setApiClient(newApiClient)
 
     // Reload data with new mode
@@ -196,6 +196,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   // Extract the section from the route path safely
   const getCurrentSection = () => {
     try {
+      // Handle route patterns like "/entities/:name" -> "entities"
       const pathParts = route.path.split("/").filter(Boolean)
       return pathParts[0] || "entities"
     } catch (error) {
@@ -238,14 +239,15 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
                         <SidebarMenuButton
                           onClick={() => {
                             try {
-                              navigate(item.path)
+                              navigate(item.path, undefined, undefined)
                             } catch (error) {
                               console.warn("Failed to navigate:", error)
                             }
                           }}
                           isActive={currentSection === item.id}
+                          style={{ height: "4rem", minHeight: "4rem" }}
                           className={cn(
-                            "h-12 w-full justify-center p-0 mx-0 rounded-none border-l-2 border-transparent min-w-full",
+                            "w-full justify-center p-0 mx-0 rounded-none border-l-2 border-transparent min-w-full",
                             currentSection === item.id && "border-l-primary bg-accent"
                           )}
                         >
@@ -285,7 +287,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <SidebarMenuButton asChild className="h-12 w-full justify-center p-0 mx-0 rounded-none min-w-full">
+                      <SidebarMenuButton asChild style={{ height: "4rem", minHeight: "4rem" }} className="w-full justify-center p-0 mx-0 rounded-none min-w-full">
                         <a href="https://docs.mantisbase.com" target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center">
                           <ExternalLink className="h-6 w-6" />
                           <span className="sr-only">Documentation</span>

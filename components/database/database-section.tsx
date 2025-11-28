@@ -24,26 +24,43 @@ interface DatabaseSectionProps {
 }
 
 export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseSectionProps) {
-  const [searchTerm, setSearchTerm] = React.useState("")
+  const { route, navigate } = useRouter()
+  const { toast } = useToast()
+  
+  // Initialize search term from query params
+  const initialFilter = route.queryParams.filter || ""
+  const [searchTerm, setSearchTerm] = React.useState(initialFilter)
   const [editingTable, setEditingTable] = React.useState<TableMetadata | null>(null)
   const [searchExpanded, setSearchExpanded] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [docsOpen, setDocsOpen] = React.useState(false)
-  const { route, navigate } = useRouter()
-  const { toast } = useToast()
 
-  // Check if we're viewing a specific entity - safer parsing
-  const getSelectedEntityName = () => {
-    try {
-      const pathParts = route.path.split("/").filter(Boolean)
-      return pathParts.length > 1 && pathParts[0] === "entities" ? pathParts[1] : null
-    } catch (error) {
-      console.warn("Error parsing entity route:", error)
-      return null
+  // Sync search term with query params
+  React.useEffect(() => {
+    const filterFromQuery = route.queryParams.filter || ""
+    if (filterFromQuery !== searchTerm) {
+      setSearchTerm(filterFromQuery)
     }
-  }
+  }, [route.queryParams.filter])
 
-  const selectedEntityName = getSelectedEntityName()
+  // Update URL when search term changes (debounced)
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (route.path === "/entities" || route.path === "/entities/:name") {
+        const queryParams = searchTerm ? { filter: searchTerm } : {}
+        if (route.pathParams.name) {
+          navigate("/entities/:name", { name: route.pathParams.name }, queryParams)
+        } else {
+          navigate("/entities", undefined, queryParams)
+        }
+      }
+    }, 300) // Debounce for 300ms
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm, route.path, route.pathParams.name])
+
+  // Get selected entity name from path params
+  const selectedEntityName = route.pathParams.name || null
 
   const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table.name.toLowerCase().includes(searchTerm.toLowerCase())) : []
 
@@ -70,12 +87,17 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
       })
     } catch (error) {
       console.error("Failed to delete table:", error)
+      // toast({
+      //   title: "Error Deleted",
+      //   description: "Table deleted successfully!",
+      //   duration: 3000,
+      // })
     }
   }
 
   const handleEntityClick = (entityName: string) => {
     try {
-      navigate(`/entities/${entityName}`)
+      navigate("/entities/:name", { name: entityName })
     } catch (error) {
       console.warn("Failed to navigate to entity:", error)
     }
@@ -186,7 +208,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
             table={selectedEntity}
             onBack={() => {
               try {
-                navigate("/entities")
+                navigate("/entities", undefined, undefined)
               } catch (error) {
                 console.warn("Failed to navigate back:", error)
               }
