@@ -1,5 +1,7 @@
 # Mantis Admin Dashboard
-This is the admin dashboard for [mantis](https://github.com/allankoechke/mantis), a BaaS written in C++. 
-> Still in development, some features may be broken!
+Release brach for the `master` branch targetted at C++ integration. This branch should be updated automatically with every release of the `master` branch.
 
-![](screenshot.png)
+## What's the plan here?
+- When master is tagged for release, build `master` artefacts
+- Add the artefacts to this branch 
+- C++ project pulls this branch for integration directly.
