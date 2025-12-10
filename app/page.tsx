@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { LoginForm } from "@/components/login-form"
+import { SetupForm } from "@/components/setup-form"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -31,11 +32,17 @@ export default function Page() {
     if (mounted) {
       try {
         const currentPath = route.path
+        const isSetupRoute = currentPath === "/setup"
+
+        // Setup route doesn't require authentication
+        if (isSetupRoute) {
+          return
+        }
 
         if (!token && currentPath !== "/login") {
-          navigate("/login")
+          navigate("/login", undefined, undefined)
         } else if (token && currentPath === "/login") {
-          navigate("/tables")
+          navigate("/entities", undefined, undefined)
         }
       } catch (error) {
         console.warn("Failed to handle route change:", error)
@@ -46,7 +53,7 @@ export default function Page() {
   const handleLogin = (newToken: string) => {
     try {
       setToken(newToken)
-      navigate("/tables")
+      navigate("/entities", undefined, undefined)
     } catch (error) {
       console.warn("Failed to handle login:", error)
     }
@@ -56,9 +63,17 @@ export default function Page() {
     try {
       setToken(null)
       localStorage.removeItem("admin_token")
-      navigate("/login")
+      navigate("/login", undefined, undefined)
     } catch (error) {
       console.warn("Failed to handle logout:", error)
+    }
+  }
+
+  const handleSetupComplete = () => {
+    try {
+      navigate("/login", undefined, undefined)
+    } catch (error) {
+      console.warn("Failed to handle setup complete:", error)
     }
   }
 
@@ -73,10 +88,15 @@ export default function Page() {
     )
   }
 
+  const isSetupRoute = route.path === "/setup"
+  const setupToken = route.queryParams.token
+
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem storageKey="mantis-admin-theme" disableTransitionOnChange>
       <AppStateProvider>
-        {route.path === "/login" || !token ? (
+        {isSetupRoute && setupToken ? (
+          <SetupForm token={setupToken} onSetupComplete={handleSetupComplete} />
+        ) : route.path === "/login" || !token ? (
           <LoginForm onLogin={handleLogin} />
         ) : (
           <AdminDashboard token={token} onLogout={handleLogout} />

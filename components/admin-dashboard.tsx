@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -34,6 +40,7 @@ import { useToast } from "@/hooks/use-toast"
 import { ThemeToggle } from "./theme-toggle"
 import { useRouter } from "@/lib/router"
 import { useAppState, type AppMode } from "@/lib/app-state"
+import { cn } from "@/lib/utils"
 
 interface AdminDashboardProps {
   token: string
@@ -73,9 +80,9 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     [toast],
   )
 
-  const handleUnauthorized = React.useCallback((reason: string | null) => {
+  const handleUnauthorized = React.useCallback((reason?: string | "") => {
     try {
-      setAuthErrorReason(reason)  // Set the auth error string
+      setAuthErrorReason(reason || "")  // Set the auth error string
       setAuthErrorDialog(true)    // Set the auth dialog to open
       handleLogout()
     } catch (error) {
@@ -84,7 +91,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }, [])
 
   const [apiClient, setApiClient] = React.useState(
-    () => new ApiClient(token, handleUnauthorized, showError),
+    () => new ApiClient(token || "", handleUnauthorized, showError),
   )
 
   React.useEffect(() => {
@@ -94,7 +101,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   // Update API client when mode or settings change
   React.useEffect(() => {
-    const newApiClient = new ApiClient(token, handleUnauthorized, showError)
+    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
     setApiClient(newApiClient)
   }, [token, handleUnauthorized, showError])
 
@@ -151,8 +158,8 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }
 
   const handleModeChange = (newMode: AppMode, baseUrl?: string) => {
-    // Update API client with new mode and base URL
-    const newApiClient = new ApiClient(token, handleUnauthorized, newMode, baseUrl, showError)
+    // Update API client when mode changes (mode is handled via app state)
+    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
     setApiClient(newApiClient)
 
     // Reload data with new mode
@@ -161,10 +168,16 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   const sidebarItems = [
     {
-      title: "Tables",
+      title: "Entities",
       icon: Table,
-      id: "tables",
-      path: "/tables",
+      id: "entities",
+      path: "/entities",
+    },
+    {
+      title: "Logs",
+      icon: FileText,
+      id: "logs",
+      path: "/logs",
     },
     {
       title: "Admins",
@@ -172,18 +185,6 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       id: "admins",
       path: "/admins",
     },
-    // {
-    //   title: "Logs",
-    //   icon: FileText,
-    //   id: "logs",
-    //   path: "/logs",
-    // },
-    // {
-    //   title: "Sync",
-    //   icon: RefreshCw,
-    //   id: "sync",
-    //   path: "/sync",
-    // },
     {
       title: "Settings",
       icon: Settings,
@@ -195,11 +196,12 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   // Extract the section from the route path safely
   const getCurrentSection = () => {
     try {
+      // Handle route patterns like "/entities/:name" -> "entities"
       const pathParts = route.path.split("/").filter(Boolean)
-      return pathParts[0] || "tables"
+      return pathParts[0] || "entities"
     } catch (error) {
       console.warn("Error parsing route:", error)
-      return "tables"
+      return "entities"
     }
   }
 
@@ -217,75 +219,108 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider open={false}>
       <div className="flex min-h-screen w-full">
-        <Sidebar>
-          <SidebarHeader>
-            <div className="flex items-center gap-2 px-4 py-2">
-              <Shield className="h-6 w-6" />
-              <span className="font-semibold">Mantis Admin</span>
+        <Sidebar collapsible="icon" className="border-r" style={{width: "4rem", minWidth: "4rem", maxWidth: "4rem", "--sidebar-width": "4rem", "--sidebar-width-icon": "4rem"} as React.CSSProperties}>
+          <SidebarHeader className="border-b p-0 w-full">
+            <div className="flex h-16 w-full items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Shield className="h-6 w-6" />
+              </div>
             </div>
           </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {sidebarItems.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        onClick={() => {
-                          try {
-                            navigate(item.path)
-                          } catch (error) {
-                            console.warn("Failed to navigate:", error)
-                          }
-                        }}
-                        isActive={currentSection === item.id}
-                        className={currentSection === item.id ? "bg-accent text-accent-foreground" : ""}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            <SidebarMenu>
-              {settings && (
-                <SidebarMenuItem>
-                  <div className="px-4 py-1 text-xs text-muted-foreground">Mantis Version {settings.mantisVersion}</div>
+          <SidebarContent className="px-0 py-2 w-full">
+            <SidebarMenu className="space-y-1 w-full">
+              {sidebarItems.map((item) => (
+                <SidebarMenuItem key={item.id} className="w-full">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton
+                          onClick={() => {
+                            try {
+                              navigate(item.path, undefined, undefined)
+                            } catch (error) {
+                              console.warn("Failed to navigate:", error)
+                            }
+                          }}
+                          isActive={currentSection === item.id}
+                          style={{ height: "4rem", minHeight: "4rem" }}
+                          className={cn(
+                            "w-full justify-center p-0 mx-0 rounded-none border-l-2 border-transparent min-w-full",
+                            currentSection === item.id && "border-l-primary bg-accent"
+                          )}
+                        >
+                          <item.icon className={cn(
+                            "h-6 w-6",
+                            currentSection === item.id && "text-primary"
+                          )} />
+                          <span className="sr-only">{item.title}</span>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>{item.title}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </SidebarMenuItem>
-              )}
-              <SidebarMenuItem>
-                <div className="px-4 py-1 text-xs text-muted-foreground">Mantis Admin Version {process.env.MANTIS_ADMIN_VERSION}</div>
+              ))}
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarFooter className="border-t p-0 w-full">
+            <SidebarMenu className="space-y-1 w-full">
+              <SidebarMenuItem className="w-full">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="w-full">
+                        <ThemeToggle iconOnly />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Toggle Theme</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="https://allankoechke.github.io/mantis" target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-4 w-4" />
-                    <span>Documentation</span>
-                  </a>
-                </SidebarMenuButton>
+              <SidebarMenuItem className="w-full">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SidebarMenuButton asChild style={{ height: "4rem", minHeight: "4rem" }} className="w-full justify-center p-0 mx-0 rounded-none min-w-full">
+                        <a href="https://docs.mantisbase.com" target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center">
+                          <ExternalLink className="h-6 w-6" />
+                          <span className="sr-only">Documentation</span>
+                        </a>
+                      </SidebarMenuButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Documentation</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <ThemeToggle />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={handleLogout}>
-                  <LogOut className="h-4 w-4" />
-                  <span>Logout</span>
-                </SidebarMenuButton>
+              <SidebarMenuItem className="w-full">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SidebarMenuButton onClick={handleLogout} className="h-12 w-full justify-center p-0 mx-0 rounded-none min-w-full">
+                        <LogOut className="h-6 w-6" />
+                        <span className="sr-only">Logout</span>
+                      </SidebarMenuButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Logout</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
 
         <div className="flex-1">
-          <main className="p-6">
+          <main className="pl-4">
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="text-center">
@@ -295,13 +330,13 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
               </div>
             ) : (
               <>
-                {currentSection === "tables" && (
+                {currentSection === "entities" && (
                   <DatabaseSection apiClient={apiClient} tables={tables} onTablesUpdate={setTables} />
                 )}
                 {currentSection === "admins" && (
                   <AdminsSection admins={admins} apiClient={apiClient} onAdminsUpdate={setAdmins} />
                 )}
-                {currentSection === "logs" && <LogsSection />}
+                {currentSection === "logs" && <LogsSection apiClient={apiClient} />}
                 {currentSection === "sync" && <SyncSection />}
                 {currentSection === "settings" && (
                   <SettingsSection

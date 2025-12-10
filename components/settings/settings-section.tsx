@@ -1,14 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCw, TestTube, Globe } from "lucide-react"
+import { RefreshCw, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Badge } from "@/components/ui/badge"
 import type { ApiClient, AppSettings } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAppState, type AppMode } from "@/lib/app-state"
@@ -24,16 +22,77 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
   const { toast } = useToast()
   const { mode, setMode } = useAppState()
   const [formData, setFormData] = React.useState<AppSettings | null>(null)
-  const [isLoading, setIsLoading] = React.useState(false)
-  const [hasChanges, setHasChanges] = React.useState(false)
+  const [originalData, setOriginalData] = React.useState<AppSettings | null>(null)
+  const [isLoading, setIsLoading] = React.useState<Record<string, boolean>>({})
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   React.useEffect(() => {
     if (settings) {
-      setFormData({ ...settings, mode })
-      setHasChanges(false)
+      const data = { ...settings, mode }
+      setFormData(data)
+      setOriginalData(data)
     }
   }, [settings, mode])
+
+  // Track changes per card section
+  const getCardChanges = (cardType: "general" | "file" | "features"): boolean => {
+    if (!formData || !originalData) return false
+    
+    if (cardType === "general") {
+      return (
+        formData.appName !== originalData.appName ||
+        formData.baseUrl !== originalData.baseUrl
+      )
+    }
+    
+    if (cardType === "file") {
+      return (
+        formData.maxFileSize !== originalData.maxFileSize ||
+        formData.sessionTimeout !== originalData.sessionTimeout ||
+        formData.adminSessionTimeout !== originalData.adminSessionTimeout
+      )
+    }
+    
+    if (cardType === "features") {
+      return (
+        formData.maintenanceMode !== originalData.maintenanceMode ||
+        formData.allowRegistration !== originalData.allowRegistration ||
+        formData.emailVerificationRequired !== originalData.emailVerificationRequired
+      )
+    }
+    
+    return false
+  }
+
+  const resetCardChanges = (cardType: "general" | "file" | "features") => {
+    if (!formData || !originalData) return
+    
+    if (cardType === "general") {
+      setFormData({
+        ...formData,
+        appName: originalData.appName,
+        baseUrl: originalData.baseUrl,
+      })
+    }
+    
+    if (cardType === "file") {
+      setFormData({
+        ...formData,
+        maxFileSize: originalData.maxFileSize,
+        sessionTimeout: originalData.sessionTimeout,
+        adminSessionTimeout: originalData.adminSessionTimeout,
+      })
+    }
+    
+    if (cardType === "features") {
+      setFormData({
+        ...formData,
+        maintenanceMode: originalData.maintenanceMode,
+        allowRegistration: originalData.allowRegistration,
+        emailVerificationRequired: originalData.emailVerificationRequired,
+      })
+    }
+  }
 
   const handleInputChange = (field: keyof AppSettings, value: any) => {
     if (!formData) return
@@ -42,25 +101,12 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
       ...formData,
       [field]: value,
     })
-    setHasChanges(true)
   }
 
-  const handleModeToggle = (newMode: AppMode) => {
-    setMode(newMode)
-    if (formData) {
-      setFormData({
-        ...formData,
-        mode: newMode,
-      })
-      setHasChanges(true)
-    }
-    onModeChange(newMode, formData?.baseUrl)
-  }
-
-  const handleSave = async () => {
+  const handleSave = async (cardType: "general" | "file" | "features") => {
     if (!formData) return
 
-    setIsLoading(true)
+    setIsLoading({ ...isLoading, [cardType]: true })
     try {
       const updatedSettings = await apiClient.call<AppSettings>("/api/v1/settings/config", {
         method: "PATCH",
@@ -70,18 +116,25 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
       // If the request failed, throw the error here 
       if (updatedSettings?.error?.length > 0) throw updatedSettings.error
 
+      const data = { ...updatedSettings, mode }
+      setFormData(data)
+      setOriginalData(data)
       onSettingsUpdate(updatedSettings)
-      setHasChanges(false)
 
       toast({
         title: "Settings Saved",
-        description: "Application settings have been updated successfully.",
+        description: `${cardType.charAt(0).toUpperCase() + cardType.slice(1)} settings have been updated successfully.`,
         duration: 3000,
       })
     } catch (error) {
       console.error("Failed to update settings:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+      })
     } finally {
-      setIsLoading(false)
+      setIsLoading({ ...isLoading, [cardType]: false })
     }
   }
 
@@ -114,216 +167,225 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 p-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger />
-          <div>
-            <h2 className="text-2xl font-bold">Application Settings</h2>
-            <p className="text-muted-foreground">Configure global application settings</p>
-          </div>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground">Manage your application configuration and preferences</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={mode === "TEST" ? "secondary" : "default"} className="flex items-center gap-1">
-            {mode === "TEST" ? <TestTube className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
-            {mode} MODE
-          </Badge>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+        </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>General Settings</CardTitle>
-          <CardDescription>Basic application configuration</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="app-name">Application Name</Label>
-              <Input
-                id="app-name"
-                value={formData?.appName || ""}
-                onChange={(e) => handleInputChange("appName", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="version">Version</Label>
-              <Input
-                id="version"
-                value={formData?.mantisVersion || ""}
-                disabled={true}
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="base-url">Base URL</Label>
-            <Input
-              id="base-url"
-              value={formData?.baseUrl || ""}
-              onChange={(e) => handleInputChange("baseUrl", e.target.value)}
-              placeholder="https://your-api-domain.com"
-            />
-            <p className="text-sm text-muted-foreground mt-1">
-              The base URL for your API endpoints{" "}
-              {mode === "PROD" ? "(used in production mode)" : "(not used in test mode)"}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="max-file-size">Max File Size (MB)</Label>
-              <Input
-                id="max-file-size"
-                type="number"
-                value={formData?.maxFileSize?.toString() || 10}
-                onChange={(e) => handleInputChange("maxFileSize", Number.parseInt(e.target.value) || 10)}
-
-              />
-            </div>
-            <div>
-              <Label htmlFor="session-timeout">Session Timeout (seconds)</Label>
-              <Input
-                id="session-timeout"
-                type="number"
-                value={formData?.sessionTimeout?.toString() || 86400}
-                onChange={(e) => handleInputChange("sessionTimeout", Number.parseInt(e.target.value) || 86400)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="session-timeout">Admin Session Timeout (seconds)</Label>
-              <Input
-                id="admin-session-timeout"
-                type="number"
-                value={formData?.adminSessionTimeout?.toString() || 84000}
-                onChange={(e) => handleInputChange("adminSessionTimeout", Number.parseInt(e.target.value) || 3600)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
+      <div className="space-y-6">
+        {/* General Settings */}
+        <Card>
+          <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <Label>Maintenance Mode</Label>
-                <p className="text-sm text-muted-foreground">Enable maintenance mode for the application</p>
+                <CardTitle>General</CardTitle>
+                <CardDescription>Basic application information and configuration</CardDescription>
               </div>
-              <Switch
-                checked={formData?.maintenanceMode || false}
-                onCheckedChange={(checked) => handleInputChange("maintenanceMode", checked)}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Allow Registration</Label>
-                <p className="text-sm text-muted-foreground">Allow new users to register</p>
-              </div>
-              <Switch
-                checked={formData?.allowRegistration || false}
-                onCheckedChange={(checked) => handleInputChange("allowRegistration", checked)}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Email Verification Required</Label>
-                <p className="text-sm text-muted-foreground">Require email verification for new accounts</p>
-              </div>
-              <Switch
-                checked={formData?.emailVerificationRequired || false}
-                onCheckedChange={(checked) => handleInputChange("emailVerificationRequired", checked)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Environment Mode Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Environment Mode</CardTitle>
-          <CardDescription>Switch between test mode (cors supported) and production mode (real API calls)</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card
-              className={`cursor-pointer transition-all ${mode === "TEST" ? "ring-2 ring-primary" : "hover:bg-muted/50"}`}
-              onClick={() => handleModeToggle("TEST")}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <TestTube className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <h4 className="font-medium">Test Mode</h4>
-                    <p className="text-sm text-muted-foreground">Uses UI dev server for development</p>
-                  </div>
-                  {mode === "TEST" && (
-                    <Badge variant="default" className="ml-auto">
-                      Active
-                    </Badge>
+              {getCardChanges("general") && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave("general")}
+                  disabled={isLoading.general}
+                  className="gap-2"
+                >
+                  {isLoading.general ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
                   )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="app-name">Application Name</Label>
+                  <Input
+                    id="app-name"
+                    value={formData?.appName || ""}
+                    onChange={(e) => handleInputChange("appName", e.target.value)}
+                    placeholder="My Application"
+                  />
                 </div>
-              </CardContent>
-            </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="version">Version</Label>
+                  <Input
+                    id="version"
+                    value={formData?.mantisVersion || ""}
+                    disabled
+                    className="bg-muted"
+                  />
+                </div>
+              </div>
 
-            <Card
-              className={`cursor-pointer transition-all ${mode === "PROD" ? "ring-2 ring-primary" : "hover:bg-muted/50"}`}
-              onClick={() => handleModeToggle("PROD")}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <Globe className="h-5 w-5 text-green-600" />
-                  <div>
-                    <h4 className="font-medium">Production Mode</h4>
-                    <p className="text-sm text-muted-foreground">API and UI running on same server.</p>
-                  </div>
-                  {mode === "PROD" && (
-                    <Badge variant="default" className="ml-auto">
-                      Active
-                    </Badge>
+              <div className="space-y-2">
+                <Label htmlFor="base-url">Base URL</Label>
+                <Input
+                  id="base-url"
+                  value={formData?.baseUrl || ""}
+                  onChange={(e) => handleInputChange("baseUrl", e.target.value)}
+                  placeholder="https://your-api-domain.com"
+                />
+                <p className="text-sm text-muted-foreground">
+                  {mode === "PROD" 
+                    ? "The base URL for your API endpoints in production mode"
+                    : "Not used in test mode - API calls go to external server"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+        {/* File & Session Settings */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>File & Sessions</CardTitle>
+                <CardDescription>Configure file upload limits and session timeouts</CardDescription>
+              </div>
+              {getCardChanges("file") && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave("file")}
+                  disabled={isLoading.file}
+                  className="gap-2"
+                >
+                  {isLoading.file ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
                   )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="max-file-size">Max File Size (MB)</Label>
+                  <Input
+                    id="max-file-size"
+                    type="number"
+                    value={formData?.maxFileSize?.toString() || 10}
+                    onChange={(e) => handleInputChange("maxFileSize", Number.parseInt(e.target.value) || 10)}
+                    min="1"
+                  />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+                <div className="space-y-2">
+                  <Label htmlFor="session-timeout">Session Timeout (s)</Label>
+                  <Input
+                    id="session-timeout"
+                    type="number"
+                    value={formData?.sessionTimeout?.toString() || 86400}
+                    onChange={(e) => handleInputChange("sessionTimeout", Number.parseInt(e.target.value) || 86400)}
+                    min="1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin-session-timeout">Admin Session (s)</Label>
+                  <Input
+                    id="admin-session-timeout"
+                    type="number"
+                    value={formData?.adminSessionTimeout?.toString() || 3600}
+                    onChange={(e) => handleInputChange("adminSessionTimeout", Number.parseInt(e.target.value) || 3600)}
+                    min="1"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          {mode === "TEST" && (
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <div className="flex items-start gap-2">
-                <Globe className="h-4 w-4 text-yellow-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Testing Mode Active</p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    All API calls will be made to an external API server. Ensure your API server is running and
-                    accessible, and set `MANTIS_PORT` in the env settings.
+        {/* Feature Toggles */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Features</CardTitle>
+                <CardDescription>Enable or disable application features</CardDescription>
+              </div>
+              {getCardChanges("features") && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave("features")}
+                  disabled={isLoading.features}
+                  className="gap-2"
+                >
+                  {isLoading.features ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Maintenance Mode</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Temporarily disable access to the application
                   </p>
                 </div>
+                <Switch
+                  checked={formData?.maintenanceMode || false}
+                  onCheckedChange={(checked) => handleInputChange("maintenanceMode", checked)}
+                />
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Allow Registration</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Allow new users to create accounts
+                  </p>
+                </div>
+                <Switch
+                  checked={formData?.allowRegistration || false}
+                  onCheckedChange={(checked) => handleInputChange("allowRegistration", checked)}
+                />
+              </div>
 
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          onClick={() => {
-            if (settings) {
-              setFormData({ ...settings, mode })
-              setHasChanges(false)
-            }
-          }}
-          disabled={!hasChanges}
-        >
-          Reset
-        </Button>
-        <Button onClick={handleSave} disabled={isLoading || !hasChanges}>
-          {isLoading ? "Saving..." : "Save Settings"}
-        </Button>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Email Verification</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Require email verification for new accounts
+                  </p>
+                </div>
+                <Switch
+                  checked={formData?.emailVerificationRequired || false}
+                  onCheckedChange={(checked) => handleInputChange("emailVerificationRequired", checked)}
+                />
+              </div>
+            </CardContent>
+          </Card>
       </div>
     </div>
   )

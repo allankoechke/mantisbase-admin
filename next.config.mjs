@@ -17,9 +17,7 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'export',
-  trailingSlash: true, // ensures `/admin/index.html` works
-  basePath: '/admin',
-  assetPrefix: '/admin',
+  trailingSlash: true,
 }
 
 

@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ApiClient, TableMetadata, getApiBaseUrl } from "@/lib/api"
 import { TableConfigDrawer } from "./table-config-drawer"
 import { TableRecordDocsDrawer } from "./table-records-docs-drawer"
@@ -16,10 +15,11 @@ import { EditItemDrawer } from "./edit-item-drawer"
 import { AddItemDrawer } from "./add-item-drawer"
 import { ColumnVisibilityDropdown } from "./column-visibility-dropdown"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "@/lib/router"
 
 interface TableDetailViewProps {
   table: TableMetadata
-  onBack: () => void
+  onBack?: () => void
   apiClient: ApiClient
   onTableUpdate: (table: TableMetadata) => void
 }
@@ -39,9 +39,22 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     table.schema.fields?.map((field) => field.name) || [],
   )
   const [isDeleting, setIsDeleting] = React.useState(false)
-  const [filterTerm, setFilterTerm] = React.useState("")
-  const [appliedFilter, setAppliedFilter] = React.useState("")
+  const { route, navigate } = useRouter()
   const { toast } = useToast()
+  
+  // Initialize filter from query params
+  const initialFilter = route.queryParams.filter || ""
+  const [filterTerm, setFilterTerm] = React.useState(initialFilter)
+  const [appliedFilter, setAppliedFilter] = React.useState(initialFilter)
+
+  // Sync filter with query params
+  React.useEffect(() => {
+    const filterFromQuery = route.queryParams.filter || ""
+    if (filterFromQuery !== appliedFilter) {
+      setAppliedFilter(filterFromQuery)
+      setFilterTerm(filterFromQuery)
+    }
+  }, [route.queryParams.filter])
 
   React.useEffect(() => {
     loadTableData()
@@ -87,6 +100,10 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
   const handleFilter = () => {
     setAppliedFilter(filterTerm)
     setCurrentPage(1) // Reset to first page when filtering
+    
+    // Update URL with filter query param
+    const queryParams = filterTerm ? { filter: filterTerm } : {}
+    navigate("/entities/:name", { name: table.name }, queryParams)
   }
 
   const handleFilterKeyPress = (e: React.KeyboardEvent) => {
@@ -212,69 +229,66 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger />
-          <Button variant="ghost" onClick={onBack}>
-            ← Back
-          </Button>
-          <div>
-            <h2 className="text-2xl font-bold capitalize">{table.name} Table</h2>
-            <p className="text-muted-foreground">View and manage table data</p>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold">
+            Entity <span className="text-primary font-mono italic">'{table.name}'</span> data
+          </h2>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleReload} disabled={isLoading}>
+          <Button variant="outline" size="icon" onClick={handleReload} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
           </Button>
-          {!isViewType &&
+          <Button variant="outline" size="icon" onClick={() => setConfigOpen(true)}>
+            <Cog className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => setDocsOpen(true)}>
+            <FileText className="h-4 w-4" />
+          </Button>
+          {!isViewType && (
             <Button size="sm" onClick={handleAddItem} disabled={isLoading}>
               <Plus className="h-4 w-4 mr-2" />
               New Record
             </Button>
-          }
-          <Button variant="outline" size="sm" onClick={() => setConfigOpen(true)}>
-            <Cog className="h-4 w-4 mr-2" />
-            Config
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setDocsOpen(true)}>
-            <FileText className="h-4 w-4 mr-2" />
-            API Docs
-          </Button>
+          )}
         </div>
       </div>
 
       {/* Search/Filter Bar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search records..."
-                value={filterTerm}
-                onChange={(e) => setFilterTerm(e.target.value)}
-                onKeyPress={handleFilterKeyPress}
-                className="pl-10"
-              />
-            </div>
-            <Button onClick={handleFilter} disabled={isLoading}>
-              Filter
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+        <Input
+          placeholder="Search records..."
+          value={filterTerm}
+          onChange={(e) => setFilterTerm(e.target.value)}
+          onKeyPress={handleFilterKeyPress}
+          className="pl-10 pr-20"
+        />
+        <Button 
+          onClick={handleFilter} 
+          disabled={isLoading}
+          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7"
+          size="sm"
+        >
+          Filter
+        </Button>
+        {appliedFilter && (
+          <div className="flex items-center gap-2 mt-2">
+            <p className="text-sm text-muted-foreground">Filtering by: "{appliedFilter}"</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterTerm("")
+                setAppliedFilter("")
+                navigate("/entities/:name", { name: table.name }, {})
+              }}
+              className="h-6 text-xs"
+            >
+              Clear
             </Button>
-            {appliedFilter && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setFilterTerm("")
-                  setAppliedFilter("")
-                }}
-              >
-                Clear
-              </Button>
-            )}
           </div>
-          {appliedFilter && <p className="text-sm text-muted-foreground mt-2">Filtering by: "{appliedFilter}"</p>}
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       <Card>
         <CardHeader>
@@ -301,78 +315,80 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
           </div>
         </CardHeader>
         <CardContent>
-          {tableData.length === 0 && !isLoading ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No Records Found</h3>
-              <p className="text-muted-foreground text-center mb-6 max-w-md">
-                This table doesn't have any records yet. Add some data to get started.
-              </p>
-              <div className="flex gap-3">
-                {!isViewType &&
-                  <Button onClick={handleAddItem} disabled={isDeleting || isLoading}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Record
-                  </Button>
-                }
-                <Button variant="outline" onClick={() => setDocsOpen(true)} disabled={isDeleting}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  View API Documentation
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedItems.length === tableData.length && tableData.length > 0}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all"
-                      />
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedItems.length === tableData.length && tableData.length > 0}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  {filteredFields.map((field) => (
+                    <TableHead key={field.name} className="capitalize">
+                      {field.name}
                     </TableHead>
-                    {filteredFields.map((field) => (
-                      <TableHead key={field.name} className="capitalize">
-                        {field.name}
-                      </TableHead>
-                    ))}
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={filteredFields.length + 1} className="text-center text-muted-foreground h-64">
+                      Loading...
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableData.length > 0 ? (
-                    tableData.map((row, index) => (
-                      <TableRow
-                        key={index}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={(e) => handleRowClick(row, e)}
-                      >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={selectedItems.includes(row.id)}
-                            onCheckedChange={(checked) => handleSelectItem(row.id, checked as boolean)}
-                            aria-label={`Select row ${index + 1}`}
-                          />
-                        </TableCell>
-                        {filteredFields.map((field) => (
-                          <TableCell key={field.name}>
-                            {renderCellContent(field, row[field.name])}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={filteredFields.length + 1} className="text-center text-muted-foreground">
-                        {isLoading ? "Loading..." : "No data available"}
+                ) : tableData.length > 0 ? (
+                  tableData.map((row, index) => (
+                    <TableRow
+                      key={index}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={(e) => handleRowClick(row, e)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedItems.includes(row.id)}
+                          onCheckedChange={(checked) => handleSelectItem(row.id, checked as boolean)}
+                          aria-label={`Select row ${index + 1}`}
+                        />
                       </TableCell>
+                      {filteredFields.map((field) => (
+                        <TableCell key={field.name}>
+                          {renderCellContent(field, row[field.name])}
+                        </TableCell>
+                      ))}
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={filteredFields.length + 1} className="text-center h-64 align-middle">
+                      <div className="flex flex-col items-center justify-center py-16">
+                        <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No Records Found</h3>
+                        <p className="text-muted-foreground text-center mb-6 max-w-md">
+                          This table doesn't have any records yet. Add some data to get started.
+                        </p>
+                        <div className="flex gap-3">
+                          {!isViewType && (
+                            <Button onClick={handleAddItem} disabled={isDeleting || isLoading}>
+                              <Plus className="h-4 w-4 mr-2" />
+                              New Record
+                            </Button>
+                          )}
+                          <Button variant="outline" onClick={() => setDocsOpen(true)} disabled={isDeleting}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            View API Documentation
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">

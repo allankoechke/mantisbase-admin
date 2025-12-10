@@ -19,14 +19,11 @@ export function SyncSection() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger />
-          <div>
-            <h2 className="text-2xl font-bold">Data Synchronization</h2>
-            <p className="text-muted-foreground">Manage data sync operations and status</p>
-          </div>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Sync</h1>
+          <p className="text-muted-foreground">Manage data sync operations and status</p>
         </div>
         <Button onClick={handleSync} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
