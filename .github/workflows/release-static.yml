@@ -66,3 +66,16 @@ jobs:
           git push origin mb-admin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Zip mb-admin branch
+        run: |
+          zip -r mantis-admin-branch.zip mb-admin-branch -x "mb-admin-branch/.git/*"
+
+      - name: Upload both zips to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            mantis-admin-static.zip
+            mantis-admin-branch.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
