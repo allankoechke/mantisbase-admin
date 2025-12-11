@@ -1,8 +1,5 @@
 add_library(mantisbase_admin STATIC "")
 
-# Include CMRC module for embedding resources
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/3rdParty/cmrc)
-
 # Collect all admin dashboard static files
 file(GLOB_RECURSE ADMIN_STATIC_FILES LIST_DIRECTORIES false "${CMAKE_CURRENT_SOURCE_DIR}/public/*")
 
