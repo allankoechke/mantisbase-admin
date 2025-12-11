@@ -171,30 +171,51 @@ export class ApiClient {
   }
 }
 
+export interface LoginResponse {
+  token: string
+  user: Admin
+}
+
 export async function loginWithPassword(
   email: string,
   password: string
-) {
-  // Real API call
+): Promise<LoginResponse> {
+  // Real API call to /api/v1/auth/login
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/admins/auth-with-password`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", },
-      body: JSON.stringify({ email, password }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identity: email,
+        password: password,
+        entity: "mb_admins"
+      }),
     })
 
-    const responseData = await response.json()
+    // Handle non-JSON responses
+    let responseData: any
+    try {
+      responseData = await response.json()
+    } catch (jsonError) {
+      throw new Error("Invalid response from server")
+    }
 
-    if (response.ok) {
-      // Check if response follows our API structure
-      if (responseData.data) {
-        return responseData.data
+    // Handle response structure: { status, data: { token, user }, error }
+    if (responseData.status === 200 && responseData.data && responseData.data.token) {
+      return {
+        token: responseData.data.token,
+        user: responseData.data.user
       }
-      return responseData.data
     } else {
-      throw new Error(responseData.error || responseData.message || "Login failed")
+      // Handle error response
+      const errorMessage = responseData.error || responseData.message || "Login failed"
+      throw new Error(errorMessage)
     }
   } catch (error: any) {
+    // Re-throw if it's already an Error with a message
+    if (error instanceof Error) {
+      throw error
+    }
     throw new Error(error.message || "Network error occurred")
   }
 }
