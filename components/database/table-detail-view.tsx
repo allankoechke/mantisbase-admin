@@ -61,8 +61,8 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
   }, [currentPage, appliedFilter])
 
   React.useEffect(() => {
-    setIsViewType(table.type === "view")
-  }, [table.type])
+    setIsViewType(table.schema.type === "view")
+  }, [table.schema.type])
 
   React.useEffect(() => {
     setVisibleColumns(table.schema.fields?.map((field) => field.name) || [])
@@ -72,7 +72,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     setIsLoading(true)
 
     try {
-      const response = await apiClient.call<any>(`/api/v1/entities/${table.name}`)
+      const response = await apiClient.call<any>(`/api/v1/entities/${table.schema.name}`)
 
       // If the request failed, throw the error here 
       if (response?.error?.length > 0) throw response.error
@@ -120,7 +120,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     
     // Update URL with filter query param
     const queryParams = filterTerm ? { filter: filterTerm } : {}
-    navigate("/entities/:name", { name: table.name }, queryParams)
+    navigate("/entities/:name", { name: table.schema.name }, queryParams)
   }
 
   const handleFilterKeyPress = (e: React.KeyboardEvent) => {
@@ -166,7 +166,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     try {
       // Delete each selected item individually
       const deletePromises = selectedItems.map((itemId) =>
-        apiClient.call(`/api/v1/entities/${table.name}/${itemId}`, { method: "DELETE" }),
+        apiClient.call(`/api/v1/entities/${table.schema.name}/${itemId}`, { method: "DELETE" }),
       )
 
       await Promise.all(deletePromises)
@@ -204,13 +204,13 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
 
       case "file":
       case "files": {
-        if(value==="" || value.length === 0) return "N/A";
+        if(!value || value==="" || value.length === 0) return "N/A";
 
         const filenames = Array.isArray(value) ? value : [value];
         return (
           <div className="flex gap-2 flex-wrap">
             {filenames.map((filename: string, i: number) => {
-              const url = `${getApiBaseUrl()}/api/files/${table.name}/${encodeURIComponent(filename)}`;
+              const url = `${getApiBaseUrl()}/api/files/${table.schema.name}/${encodeURIComponent(filename)}`;
               const ext = filename.split(".").pop()?.toLowerCase() || "";
 
               const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
@@ -248,7 +248,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">
-            Entity <span className="text-primary font-mono italic">'{table.name}'</span> data
+            Entity <span className="text-primary font-mono italic">'{table.schema.name}'</span> data
           </h2>
         </div>
         <div className="flex gap-2">
@@ -297,7 +297,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
               onClick={() => {
                 setFilterTerm("")
                 setAppliedFilter("")
-                navigate("/entities/:name", { name: table.name }, {})
+                navigate("/entities/:name", { name: table.schema.name }, {})
               }}
               className="h-6 text-xs"
             >
@@ -312,7 +312,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Table Data</CardTitle>
-              <CardDescription>Current records in the {table.name} table</CardDescription>
+              <CardDescription>Current records in the {table.schema.name} table</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               {selectedItems.length > 0 && (

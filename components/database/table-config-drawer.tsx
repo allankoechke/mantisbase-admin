@@ -61,7 +61,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   React.useEffect(() => {
     if (open) {
       setColumns(table.schema?.fields.map(col => ({ ...col, old_name: col.name })) || [])
-      setRules({ addRule: table.schema.addRule, listRule: table.schema.listRule, getRule: table.schema.getRule, updateRule: table.schema.updateRule, deletRule: table.schema.deleteRule })
+      setRules({ addRule: table.schema.rules.add, listRule: table.schema.rules.list, getRule: table.schema.rules.get, updateRule: table.schema.rules.update, deletRule: table.schema.rules.delete })
       setHasUnsavedChanges(false)
       setSystemFieldsCollapsed(true)
       setDeletedColumns([])
@@ -197,7 +197,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Cog className="h-5 w-5" />
-              <DrawerTitle>Configure {table.name} Table</DrawerTitle>
+              <DrawerTitle>Configure {table.schema.name} Table</DrawerTitle>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -221,7 +221,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                       <h4 className="text-lg font-medium">Table Structure</h4>
                       <p className="text-sm text-muted-foreground">Modify columns and their properties</p>
                     </div>
-                    {table.type !== "view" && (
+                    {table.schema.type !== "view" && (
                       <Button type="button" variant="outline" size="sm" onClick={addColumn}>
                         <Plus className="h-4 w-4 mr-2" />
                         Add Column
@@ -229,7 +229,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                     )}
                   </div>
 
-                  {table.type === "view" ? (
+                  {table.schema.type === "view" ? (
                     <div className="p-4 bg-muted rounded-lg">
                       <h5 className="font-medium mb-3">SQL Query</h5>
                       <ScrollArea className="h-32">
@@ -667,7 +667,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                     </>
                   )}
 
-                  {table.type !== "view" && (
+                  {table.schema.type !== "view" && (
                     <div className="text-sm text-muted-foreground p-3 bg-muted/50 rounded-lg">
                       <div>
                         <Badge variant="outline" className="text-xs mr-2">
@@ -720,7 +720,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                         <p className="text-xs text-muted-foreground mt-1">Controls who can view individual records</p>
                       </div>
 
-                      {table.type !== "view" && (
+                      {table.schema.type !== "view" && (
                         <>
                           <div>
                             <Label htmlFor="add-rule" className="text-sm font-medium">

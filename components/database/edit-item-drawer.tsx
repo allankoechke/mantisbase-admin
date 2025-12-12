@@ -56,7 +56,7 @@ const FilePreviewField = ({
 
   const getFileUrl = (file: File | string): string => {
     if (typeof file === "string") {
-      return `${getApiBaseUrl()}/api/files/${table.name}/${encodeURIComponent(file)}`;
+      return `${getApiBaseUrl()}/api/files/${table.schema.name}/${encodeURIComponent(file)}`;
     }
     return URL.createObjectURL(file); // for newly selected files
   };
@@ -122,7 +122,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
       setFormData({ ...item })
       setHasUnsavedChanges(false)
       setTableFields(table.schema?.fields.filter(f => !isSystemGeneratedField(f)))
-      setIsViewIsViewType(table?.type === "view")
+      setIsViewIsViewType(table?.schema?.type === "view")
     }
   }, [open, item])
 
@@ -193,7 +193,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
         return;
       }
       
-      const updatedItem = await apiClient.call<any>(`/api/v1/entities/${table.name}/${formData["id"]}`, {
+      const updatedItem = await apiClient.call<any>(`/api/v1/entities/${table?.schema?.name}/${formData["id"]}`, {
         method: "PATCH",
         body: body,
       })
@@ -324,7 +324,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <DrawerDescription>Edit record in {table.name} table</DrawerDescription>
+          <DrawerDescription>Edit record in {table.schema.name} table</DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 overflow-hidden">
@@ -396,7 +396,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                     {isDisabled && (
                       <p className="text-xs text-muted-foreground">System generated field - cannot be modified</p>
                     )}
-                    {table.type === "auth" && field.name === "password" && (
+                    {table.schema.type === "auth" && field.name === "password" && (
                       <p className="text-xs text-muted-foreground">Password fields are redacted in API responses.</p>
                     )}
                   </div>

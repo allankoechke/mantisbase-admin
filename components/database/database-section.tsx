@@ -62,11 +62,11 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   // Get selected entity name from path params
   const selectedEntityName = route.pathParams.name || null
 
-  const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table?.name?.toLowerCase().includes(searchTerm.toLowerCase())) : []
+  const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table?.schema?.name?.toLowerCase().includes(searchTerm.toLowerCase())) : []
 
   const handleDeleteTable = async (tableId: string) => {
     try {
-      const res: any = await apiClient.call(`/api/v1/tables/${tableId}`, { method: "DELETE" })
+      const res: any = await apiClient.call(`/api/v1/schemas/${tableId}`, { method: "DELETE" })
 
       // If the request failed, throw the error here 
       if (res?.error?.length > 0) throw res.error
@@ -136,7 +136,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   }
 
   const selectedEntity = selectedEntityName
-    ? Array.isArray(tables) ? tables.find((t) => t.name === selectedEntityName) : null
+    ? Array.isArray(tables) ? tables.find((t) => t.schema.name === selectedEntityName) : null
     : null
 
   return (
@@ -188,22 +188,22 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                 filteredTables.map((table) => (
                   <button
                     key={table.id}
-                    onClick={() => handleEntityClick(table.name)}
+                    onClick={() => handleEntityClick(table.schema.name)}
                     className={cn(
                       "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent",
-                      selectedEntityName === table.name && "bg-accent text-accent-foreground"
+                      selectedEntityName === table.schema.name && "bg-accent text-accent-foreground"
                     )}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Table className="h-4 w-4 flex-shrink-0" />
-                        <span className="font-medium truncate">{table.name}</span>
+                        <span className="font-medium truncate">{table.schema.name}</span>
                       </div>
                       <Badge
-                        variant={table.type === "auth" ? "default" : table.type === "view" ? "secondary" : "outline"}
+                        variant={table.schema.type === "auth" ? "default" : table.schema.type === "view" ? "secondary" : "outline"}
                         className="text-xs flex-shrink-0 ml-2"
                       >
-                        {table.type}
+                        {table.schema.type}
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
