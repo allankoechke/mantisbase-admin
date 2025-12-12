@@ -32,73 +32,110 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
     system: true,
     type: "auth",
     schema: {
+      id: "mbt_10394585042835534856",
+      name: "mb_admins",
+      has_api: true,
+      system: true,
+      type: "auth",
       fields: [
         {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: null,
+          id: "mbf_14258576900392064537",
           name: "id",
-          primaryKey: true,
+          primary_key: true,
           required: true,
           system: true,
           type: "string",
           unique: false,
-          validator: null
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: "@password"
+          }
         },
         {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: 5.0,
+          id: "mbf_13735287961322938256",
+          name: "created",
+          primary_key: false,
+          required: true,
+          system: true,
+          type: "date",
+          unique: false,
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: null
+          }
+        },
+        {
+          id: "mbf_9124719522053273721",
+          name: "updated",
+          primary_key: false,
+          required: true,
+          system: true,
+          type: "date",
+          unique: false,
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: null
+          }
+        },
+        {
+          id: "mbf_16339674465020246541",
           name: "email",
-          primaryKey: false,
+          primary_key: false,
           required: true,
           system: true,
           type: "string",
           unique: true,
-          validator: "email"
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: "@email"
+          }
         },
         {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: 8.0,
+          id: "mbf_6072375419398818283",
           name: "password",
-          primaryKey: false,
+          primary_key: false,
           required: true,
           system: true,
           type: "string",
           unique: false,
-          validator: "password"
-        },
-        {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: null,
-          name: "created",
-          primaryKey: false,
-          required: true,
-          system: true,
-          type: "date",
-          unique: false,
-          validator: null
-        },
-        {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: null,
-          name: "updated",
-          primaryKey: false,
-          required: true,
-          system: true,
-          type: "date",
-          unique: false,
-          validator: null
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: "@password"
+          }
         }
       ],
+      rules: {
+        add: {
+          expr: "",
+          mode: "auth"
+        },
+        delete: {
+          expr: "",
+          mode: "auth"
+        },
+        get: {
+          expr: "",
+          mode: "auth"
+        },
+        list: {
+          expr: "",
+          mode: "auth"
+        },
+        update: {
+          expr: "",
+          mode: "auth"
+        }
+      }
     }
   };
 
@@ -140,7 +177,6 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
   }
 
   const handleAdminAdded = (admin: Admin) => {
-    console.log("Admin to be added:", admin)
     onAdminsUpdate([...admins, admin])
 
     toast({
