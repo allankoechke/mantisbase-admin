@@ -60,7 +60,18 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
 
   React.useEffect(() => {
     if (open) {
-      setColumns(table.schema?.fields.map(col => ({ ...col, old_name: col.name })) || [])
+      // Transform API format (with constraints) to UI format (flat camelCase)
+      const transformedColumns = table.schema?.fields.map(col => ({
+        ...col,
+        old_name: col.name,
+        // Flatten constraints for UI
+        primaryKey: col.primary_key || false,
+        minValue: col.constraints?.min_value || null,
+        maxValue: col.constraints?.max_value || null,
+        defaultValue: col.constraints?.default_value || null,
+        validator: col.constraints?.validator || null,
+      })) || []
+      setColumns(transformedColumns)
       setRules({ addRule: table.schema.rules.add, listRule: table.schema.rules.list, getRule: table.schema.rules.get, updateRule: table.schema.rules.update, deletRule: table.schema.rules.delete })
       setHasUnsavedChanges(false)
       setSystemFieldsCollapsed(true)
@@ -69,7 +80,27 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   }, [open, table])
 
   const addColumn = () => {
-    setColumns([...columns, { name: "", type: "string", primaryKey: false, required: true, old_name: null }])
+    setColumns([...columns, { 
+      id: `field-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: "", 
+      type: "string", 
+      primary_key: false,
+      primaryKey: false, // UI format
+      required: true, 
+      system: false,
+      unique: false,
+      constraints: {
+        default_value: null,
+        max_value: null,
+        min_value: null,
+        validator: null,
+      },
+      minValue: null, // UI format
+      maxValue: null, // UI format
+      defaultValue: null, // UI format
+      validator: null, // UI format
+      old_name: null 
+    }])
     setHasUnsavedChanges(true)
   }
 
@@ -119,12 +150,30 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const handleSaveSchema = async () => {
     setIsLoading(true)
     try {
-      const body = { fields: columns, deletedFields: deletedColumns };
+      // Transform UI format (camelCase flat) to API format (with constraints and snake_case)
+      const transformedFields = columns.map((col: any) => ({
+        id: col.id,
+        name: col.name,
+        type: col.type,
+        primary_key: col.primaryKey !== undefined ? col.primaryKey : col.primary_key,
+        required: col.required,
+        system: col.system || false,
+        unique: col.unique || false,
+        constraints: {
+          default_value: col.defaultValue !== undefined ? col.defaultValue : (col.constraints?.default_value || null),
+          max_value: col.maxValue !== undefined ? col.maxValue : (col.constraints?.max_value || null),
+          min_value: col.minValue !== undefined ? col.minValue : (col.constraints?.min_value || null),
+          validator: col.validator !== undefined ? col.validator : (col.constraints?.validator || null),
+        },
+        ...(col.old_name && { old_name: col.old_name }),
+      }))
+      
+      const body = { fields: transformedFields, deletedFields: deletedColumns };
       console.log(body)
       // return
       const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/tables/${table.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ fields: columns, deletedFields: deletedColumns }),
+        body: JSON.stringify(body),
       })
 
       // If the request failed, throw the error here 
@@ -150,11 +199,28 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/tables/${table.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          listRule: rules.listRule,
-          getRule: rules.getRule,
-          addRule: rules.addRule,
-          updateRule: rules.updateRule,
-          deleteRule: rules.deleteRule,
+          rules: {
+            list: {
+              expr: rules.listRule || "",
+              mode: "auth"
+            },
+            get: {
+              expr: rules.getRule || "",
+              mode: "auth"
+            },
+            add: {
+              expr: rules.addRule || "",
+              mode: "auth"
+            },
+            update: {
+              expr: rules.updateRule || "",
+              mode: "auth"
+            },
+            delete: {
+              expr: rules.deleteRule || "",
+              mode: "auth"
+            },
+          },
         }),
       })
 

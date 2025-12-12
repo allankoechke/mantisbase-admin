@@ -26,6 +26,8 @@ import type { ApiClient, TableMetadata, TableField } from "@/lib/api"
 import { dataTypes } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { hash } from "crypto"
+import { fi } from "date-fns/locale"
 
 interface AddTableDialogProps {
   apiClient: ApiClient
@@ -34,18 +36,20 @@ interface AddTableDialogProps {
 }
 
 interface Field {
-  id: string
+  id?: string  // Optional - missing/empty means new field
   name: string
   type: string
-  primaryKey: boolean
+  primary_key: boolean
   nullable: boolean
   unique?: boolean
-  isSystem?: boolean
+  system?: boolean
   required?: boolean
-  minValue?: number | null
-  maxValue?: number | null
-  defaultValue?: string | null
-  validator?: string | null
+  constraints: {
+    default_value: any
+    max_value: number | null
+    min_value: number | null
+    validator: string | null
+  }
 }
 
 export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTableDialogProps) {
@@ -59,8 +63,9 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
   const [expandedFields, setExpandedFields] = React.useState<Set<string>>(new Set())
   const { toast } = useToast()
 
-  // Generate unique ID for fields
-  const generateFieldId = () => `field-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  // Get unique key for field (use id if exists, otherwise generate one)
+  const getFieldKey = (field: Field, index: number) => field.id || `temp-${index}`
+  const genFieldBaseId = (name: string) => `mbf-${hash(name, "sha256").toString()}`
 
   // When drawer opens, reset and add base fields
   React.useEffect(() => {
@@ -75,22 +80,115 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
   }, [open])
 
   function addBaseFields() {
-    if (tableType === "base") {
-      setFields([
-        { id: generateFieldId(), name: "id", type: "string", primaryKey: true, nullable: false, isSystem: true, required: true },
-        { id: generateFieldId(), name: "created", type: "date", primaryKey: false, nullable: false, isSystem: true, required: true },
-        { id: generateFieldId(), name: "updated", type: "date", primaryKey: false, nullable: false, isSystem: true, required: true },
-      ])
-    } else if (tableType === "auth") {
-      setFields([
-        { id: generateFieldId(), name: "id", type: "string", primaryKey: true, nullable: false, isSystem: true, required: true },
-        { id: generateFieldId(), name: "email", type: "string", primaryKey: false, nullable: false, isSystem: true, required: true },
-        { id: generateFieldId(), name: "password", type: "string", primaryKey: false, nullable: false, isSystem: true, required: true },
-        { id: generateFieldId(), name: "created", type: "date", primaryKey: false, nullable: false, isSystem: true, required: true },
-        { id: generateFieldId(), name: "updated", type: "date", primaryKey: false, nullable: false, isSystem: true, required: true },
-      ])
-    } else {
+    if (tableType === "view") {
       setFields([])
+    } else {
+      // Add base fields
+      setFields([
+        {
+          id: genFieldBaseId("id"),
+          name: "id",
+          type: "string",
+          primary_key: true,
+          nullable: false,
+          system: true,
+          required: true,
+          unique: false,
+          constraints: {
+            min_value: 6,
+            max_value: null,
+            default_value: null,
+            validator: "@password"
+          }
+        },
+        {
+          id: genFieldBaseId("created"),
+          name: "created",
+          type: "date",
+          primary_key: false,
+          nullable: false,
+          system: true,
+          required: true,
+          unique: false,
+          constraints: {
+            min_value: null,
+            max_value: null,
+            default_value: null,
+            validator: null
+          }
+        },
+        {
+          id: genFieldBaseId("updated"),
+          name: "updated",
+          type: "date",
+          primary_key: false,
+          nullable: false,
+          system: true,
+          required: true,
+          unique: false,
+          constraints: {
+            min_value: null,
+            max_value: null,
+            default_value: null,
+            validator: null
+          }
+        },
+      ])
+
+      // For auth types, extend with auth specific fields
+      if (tableType === "auth") {
+        setFields([
+          ...fields,
+          {
+            id: genFieldBaseId("name"),
+            name: "name",
+            type: "string",
+            primary_key: false,
+            nullable: false,
+            system: true,
+            required: true,
+            unique: false,
+            constraints: {
+              min_value: 3,
+              max_value: null,
+              default_value: null,
+              validator: null
+            }
+          },
+          {
+            id: genFieldBaseId("email"),
+            name: "email",
+            type: "string",
+            primary_key: false,
+            nullable: false,
+            system: true,
+            required: true,
+            unique: true,
+            constraints: {
+              min_value: 5,
+              max_value: null,
+              default_value: null,
+              validator: "@email"
+            }
+          },
+          {
+            id: genFieldBaseId("password"),
+            name: "password",
+            type: "string",
+            primary_key: false,
+            nullable: false,
+            system: true,
+            required: true,
+            unique: false,
+            constraints: {
+              min_value: 6,
+              max_value: null,
+              default_value: null,
+              validator: "@password"
+            }
+          },
+        ])
+      }
     }
   }
 
@@ -103,33 +201,67 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
   const addField = () => {
     setFields([
       ...fields,
-      { id: generateFieldId(), name: "", type: "string", primaryKey: false, nullable: true, isSystem: false, required: false },
+      {
+        name: "",
+        type: "string",
+        primary_key: false,
+        nullable: true,
+        system: false,
+        required: false,
+        unique: false,
+        constraints: {
+          min_value: null,
+          max_value: null,
+          default_value: null,
+          validator: null
+        }
+      },
     ])
   }
 
-  const removeField = (fieldId: string) => {
-    const field = fields.find((f) => f.id === fieldId)
-    if (field && !field.isSystem) {
-      setFields(fields.filter((f) => f.id !== fieldId))
-      setExpandedFields((prev) => {
-        const next = new Set(prev)
-        next.delete(fieldId)
-        return next
-      })
-    }
+  const removeField = (fieldKey: string) => {
+    setFields((prevFields) => {
+      const fieldIndex = prevFields.findIndex((f, idx) => (f.id || `temp-${idx}`) === fieldKey)
+      if (fieldIndex >= 0 && !prevFields[fieldIndex].system) {
+        const newFields = prevFields.filter((_, idx) => idx !== fieldIndex)
+        setExpandedFields((prev) => {
+          const next = new Set(prev)
+          next.delete(fieldKey)
+          return next
+        })
+        return newFields
+      }
+      return prevFields
+    })
   }
 
-  const updateField = (fieldId: string, updates: Partial<Field>) => {
-    setFields(fields.map((f) => (f.id === fieldId ? { ...f, ...updates } : f)))
+  const updateField = (fieldKey: string, updates: Partial<Field> & { constraints?: Partial<Field['constraints']> }) => {
+    setFields((prevFields) =>
+      prevFields.map((field, index) => {
+        const currentKey = field.id || `temp-${index}`
+        if (currentKey === fieldKey) {
+          // Handle constraints updates
+          if (updates.constraints) {
+            return {
+              ...field,
+              ...updates,
+              constraints: { ...field.constraints, ...updates.constraints }
+            }
+          }
+          return { ...field, ...updates }
+        }
+        return field
+      }),
+    )
   }
 
-  const toggleFieldExpanded = (fieldId: string) => {
+  const toggleFieldExpanded = (fieldKey: string) => {
     setExpandedFields((prev) => {
       const next = new Set(prev)
-      if (next.has(fieldId)) {
-        next.delete(fieldId)
+      if (next.has(fieldKey)) {
+        next.delete(fieldKey)
       } else {
-        next.add(fieldId)
+        next.add(fieldKey)
       }
       return next
     })
@@ -146,7 +278,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
 
     const draggedField = fields[draggedIndex]
     const targetField = fields[index]
-    
+
     // Allow moving system fields, but don't allow placing non-system fields before system fields
     // This maintains system field integrity while allowing reordering
     const newFields = [...fields]
@@ -178,7 +310,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
 
       // For base and auth types, require at least one user field with a name
       if (tableType !== "view") {
-        const userFields = fields.filter((f) => !f.isSystem && f.name.trim())
+        const userFields = fields.filter((f) => !f.system && f.name.trim())
         if (userFields.length === 0) {
           toast({
             variant: "destructive",
@@ -192,35 +324,59 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
 
       // Include all fields in order (system + user) for base/auth types
       // For view types, fields are typically empty or derived from SQL
-      const allFields = tableType === "view" 
-        ? [] 
+      const allFields = tableType === "view"
+        ? []
         : fields.map(
-            (field): TableField => ({
+          (field): TableField => {
+            const fieldData: any = {
               name: field.name,
               type: field.type,
-              primaryKey: field.primaryKey,
+              primary_key: field.primary_key,
               required: field.required || !field.nullable,
               unique: field.unique || false,
-              system: field.isSystem || false,
-              minValue: field.minValue || null,
-              maxValue: field.maxValue || null,
-              defaultValue: field.defaultValue || null,
-              validator: field.validator || null,
-              autoGeneratePattern: null,
-              old_name: null,
-            }),
-          )
+              system: field.system || false,
+              constraints: field.constraints,
+            }
+            // Only include id if it exists (for existing fields being updated)
+            if (field.id) {
+              fieldData.id = field.id
+            }
+            return fieldData
+          },
+        )
 
-      const tableData: Partial<TableMetadata> = {
+      const tableData: any = {
         name: tableName,
         type: tableType,
         schema: {
-          listRule: "",
-          getRule: "",
-          addRule: "",
-          updateRule: "",
-          deleteRule: "",
+          id: "", // Will be generated by the API
+          name: tableName,
+          has_api: true,
+          system: false,
+          type: tableType,
           fields: allFields,
+          rules: {
+            add: {
+              expr: "",
+              mode: "auth"
+            },
+            delete: {
+              expr: "",
+              mode: "auth"
+            },
+            get: {
+              expr: "",
+              mode: "auth"
+            },
+            list: {
+              expr: "",
+              mode: "auth"
+            },
+            update: {
+              expr: "",
+              mode: "auth"
+            }
+          },
           ...(tableType === "view" && { sql: sqlQuery.trim() }),
         },
       }
@@ -250,7 +406,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
 
       toast({
         title: "Entity Created",
-        description: `The entity '${tableData.name}' has been created successfully.`,
+        description: `The entity '${tableName}' has been created successfully.`,
       })
     } catch (error: any) {
       toast({
@@ -331,208 +487,216 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
 
             {/* Fields Section */}
             {tableType !== "view" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-base font-medium">Fields</Label>
-                  <p className="text-sm text-muted-foreground">Define the fields for your entity</p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-medium">Fields</Label>
+                    <p className="text-sm text-muted-foreground">Define the fields for your entity</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {fields.map((field, index) => {
+                    const fieldKey = getFieldKey(field, index)
+                    return (
+                      <div
+                        key={fieldKey}
+                        draggable={true}
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={cn(
+                          "border rounded-lg p-4 space-y-3 transition-colors",
+                          field.system && "bg-muted/30 border-muted",
+                          draggedIndex === index && "opacity-50"
+                        )}
+                      >
+                        {/* Field Header - Name and Type */}
+                        <div className="flex items-center gap-3">
+                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-move flex-shrink-0" />
+                          {field.system && (
+                            <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          )}
+                          <div className="flex-1 grid grid-cols-2 gap-3">
+                            <div>
+                              <Input
+                                placeholder="Field name"
+                                value={field.name}
+                                onChange={(e) => updateField(fieldKey, { name: e.target.value })}
+                                disabled={field.system}
+                                className={field.system ? "bg-muted" : ""}
+                              />
+                            </div>
+                            <div>
+                              <Select
+                                value={field.type}
+                                onValueChange={(value) => updateField(fieldKey, { type: value })}
+                                disabled={field.system}
+                              >
+                                <SelectTrigger className={field.system ? "bg-muted" : ""}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {dataTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>
+                                      {type.toUpperCase()}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          {!field.system && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeField(fieldKey)}
+                              className="flex-shrink-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {field.system && (
+                            <Badge variant="outline" className="text-xs flex-shrink-0">
+                              System
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Collapsible Advanced Options */}
+                        {!field.system && (
+                          <Collapsible open={expandedFields.has(fieldKey)} onOpenChange={() => toggleFieldExpanded(fieldKey)}>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="w-full justify-between">
+                                <span className="text-xs text-muted-foreground">Advanced Options</span>
+                                {expandedFields.has(fieldKey) ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="space-y-3 pt-2">
+                              <div className="grid grid-cols-3 gap-3">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`pk-${fieldKey}`}
+                                    checked={field.primary_key}
+                                    onCheckedChange={(checked) => updateField(fieldKey, { primary_key: checked as boolean })}
+                                  />
+                                  <Label htmlFor={`pk-${fieldKey}`} className="text-xs cursor-pointer">
+                                    Primary Key
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`unique-${fieldKey}`}
+                                    checked={field.unique || false}
+                                    onCheckedChange={(checked) => updateField(fieldKey, { unique: checked as boolean })}
+                                  />
+                                  <Label htmlFor={`unique-${fieldKey}`} className="text-xs cursor-pointer">
+                                    Unique
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`required-${fieldKey}`}
+                                    checked={field.required || !field.nullable}
+                                    onCheckedChange={(checked) => {
+                                      updateField(fieldKey, { required: checked as boolean, nullable: !checked })
+                                    }}
+                                  />
+                                  <Label htmlFor={`required-${fieldKey}`} className="text-xs cursor-pointer">
+                                    Required
+                                  </Label>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <Label htmlFor={`min-${fieldKey}`} className="text-xs">
+                                    Min Value
+                                  </Label>
+                                  <Input
+                                    id={`min-${fieldKey}`}
+                                    type="number"
+                                    placeholder="Min"
+                                    value={field.constraints.min_value || ""}
+                                    onChange={(e) =>
+                                      updateField(fieldKey, {
+                                        constraints: {
+                                          ...field.constraints,
+                                          min_value: e.target.value ? Number.parseFloat(e.target.value) : null,
+                                        }
+                                      })
+                                    }
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor={`max-${fieldKey}`} className="text-xs">
+                                    Max Value
+                                  </Label>
+                                  <Input
+                                    id={`max-${fieldKey}`}
+                                    type="number"
+                                    placeholder="Max"
+                                    value={field.constraints.max_value || ""}
+                                    onChange={(e) =>
+                                      updateField(fieldKey, {
+                                        constraints: {
+                                          ...field.constraints,
+                                          max_value: e.target.value ? Number.parseFloat(e.target.value) : null,
+                                        }
+                                      })
+                                    }
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor={`default-${fieldKey}`} className="text-xs">
+                                  Default Value
+                                </Label>
+                                <Input
+                                  id={`default-${fieldKey}`}
+                                  placeholder="Default value"
+                                  value={field.constraints.default_value || ""}
+                                  onChange={(e) => updateField(fieldKey, { constraints: { ...field.constraints, default_value: e.target.value || null } })}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor={`validator-${fieldKey}`} className="text-xs">
+                                  Validator
+                                </Label>
+                                <Input
+                                  id={`validator-${fieldKey}`}
+                                  placeholder="Validator pattern"
+                                  value={field.constraints.validator || ""}
+                                  onChange={(e) => updateField(fieldKey, { constraints: { ...field.constraints, validator: e.target.value || null } })}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {/* Add Field Button */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed"
+                    onClick={addField}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Field
+                  </Button>
                 </div>
               </div>
-
-              <div className="space-y-3">
-                {fields.map((field, index) => (
-                  <div
-                    key={field.id}
-                    draggable={true}
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragEnd={handleDragEnd}
-                    className={cn(
-                      "border rounded-lg p-4 space-y-3 transition-colors",
-                      field.isSystem && "bg-muted/30 border-muted",
-                      draggedIndex === index && "opacity-50"
-                    )}
-                  >
-                    {/* Field Header - Name and Type */}
-                    <div className="flex items-center gap-3">
-                      <GripVertical className="h-4 w-4 text-muted-foreground cursor-move flex-shrink-0" />
-                      {field.isSystem && (
-                        <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      )}
-                      <div className="flex-1 grid grid-cols-2 gap-3">
-                        <div>
-                          <Input
-                            placeholder="Field name"
-                            value={field.name}
-                            onChange={(e) => updateField(field.id, { name: e.target.value })}
-                            disabled={field.isSystem}
-                            className={field.isSystem ? "bg-muted" : ""}
-                          />
-                        </div>
-                        <div>
-                          <Select
-                            value={field.type}
-                            onValueChange={(value) => updateField(field.id, { type: value })}
-                            disabled={field.isSystem}
-                          >
-                            <SelectTrigger className={field.isSystem ? "bg-muted" : ""}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {dataTypes.map((type) => (
-                                <SelectItem key={type} value={type}>
-                                  {type.toUpperCase()}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      {!field.isSystem && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeField(field.id)}
-                          className="flex-shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {field.isSystem && (
-                        <Badge variant="outline" className="text-xs flex-shrink-0">
-                          System
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Collapsible Advanced Options */}
-                    {!field.isSystem && (
-                      <Collapsible open={expandedFields.has(field.id)} onOpenChange={() => toggleFieldExpanded(field.id)}>
-                        <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="w-full justify-between">
-                            <span className="text-xs text-muted-foreground">Advanced Options</span>
-                            {expandedFields.has(field.id) ? (
-                              <ChevronUp className="h-4 w-4" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="space-y-3 pt-2">
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`pk-${field.id}`}
-                                checked={field.primaryKey}
-                                onCheckedChange={(checked) => updateField(field.id, { primaryKey: checked as boolean })}
-                              />
-                              <Label htmlFor={`pk-${field.id}`} className="text-xs cursor-pointer">
-                                Primary Key
-                              </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`unique-${field.id}`}
-                                checked={field.unique || false}
-                                onCheckedChange={(checked) => updateField(field.id, { unique: checked as boolean })}
-                              />
-                              <Label htmlFor={`unique-${field.id}`} className="text-xs cursor-pointer">
-                                Unique
-                              </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`required-${field.id}`}
-                                checked={field.required || !field.nullable}
-                                onCheckedChange={(checked) => {
-                                  updateField(field.id, { required: checked as boolean, nullable: !checked })
-                                }}
-                              />
-                              <Label htmlFor={`required-${field.id}`} className="text-xs cursor-pointer">
-                                Required
-                              </Label>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label htmlFor={`min-${field.id}`} className="text-xs">
-                                Min Value
-                              </Label>
-                              <Input
-                                id={`min-${field.id}`}
-                                type="number"
-                                placeholder="Min"
-                                value={field.minValue || ""}
-                                onChange={(e) =>
-                                  updateField(field.id, {
-                                    minValue: e.target.value ? Number.parseFloat(e.target.value) : null,
-                                  })
-                                }
-                                className="h-8 text-xs"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor={`max-${field.id}`} className="text-xs">
-                                Max Value
-                              </Label>
-                              <Input
-                                id={`max-${field.id}`}
-                                type="number"
-                                placeholder="Max"
-                                value={field.maxValue || ""}
-                                onChange={(e) =>
-                                  updateField(field.id, {
-                                    maxValue: e.target.value ? Number.parseFloat(e.target.value) : null,
-                                  })
-                                }
-                                className="h-8 text-xs"
-                              />
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`default-${field.id}`} className="text-xs">
-                              Default Value
-                            </Label>
-                            <Input
-                              id={`default-${field.id}`}
-                              placeholder="Default value"
-                              value={field.defaultValue || ""}
-                              onChange={(e) => updateField(field.id, { defaultValue: e.target.value || null })}
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`validator-${field.id}`} className="text-xs">
-                              Validator
-                            </Label>
-                            <Input
-                              id={`validator-${field.id}`}
-                              placeholder="Validator pattern"
-                              value={field.validator || ""}
-                              onChange={(e) => updateField(field.id, { validator: e.target.value || null })}
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    )}
-                  </div>
-                ))}
-
-                {/* Add Field Button */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-dashed"
-                  onClick={addField}
-                  disabled={tableType === "view"}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Field
-                </Button>
-              </div>
-            </div>
             )}
           </div>
         </ScrollArea>
@@ -541,14 +705,14 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
           <DrawerClose asChild>
             <Button variant="outline">Cancel</Button>
           </DrawerClose>
-          <Button 
-            onClick={handleSubmit} 
+          <Button
+            onClick={handleSubmit}
             disabled={
-              isLoading || 
-              !tableName.trim() || 
-              (tableType === "view" 
-                ? !sqlQuery.trim() 
-                : fields.filter((f) => !f.isSystem).length === 0)
+              isLoading ||
+              !tableName.trim() ||
+              (tableType === "view"
+                ? !sqlQuery.trim()
+                : fields.filter((f) => !f.system).length === 0)
             }
           >
             {isLoading ? "Creating..." : "Create Entity"}
