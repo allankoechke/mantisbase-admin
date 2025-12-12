@@ -15,9 +15,8 @@ interface TableDocsDrawerProps {
   onClose: () => void
 }
 
-// Generate docs based on user defined tables
+// Generate docs for entity schema management API
 export function TableDocsDrawer({ open, onClose }: TableDocsDrawerProps) {
-  const [table, setTable] = React.useState({})
   const handleClose = () => {
     onClose()
   }
@@ -29,55 +28,59 @@ export function TableDocsDrawer({ open, onClose }: TableDocsDrawerProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              <DrawerTitle>Tables API Documentation</DrawerTitle>
+              <DrawerTitle>Entity Schema API Documentation</DrawerTitle>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <DrawerDescription>Auto-generated API endpoints and examples</DrawerDescription>
+          <DrawerDescription>
+            API endpoints for managing entity schemas. All endpoints require admin authentication token.
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="p-6 space-y-6">
+              <div className="rounded-lg border bg-muted/30 p-4 mb-4">
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Note:</strong> All endpoints require an admin authentication token in the Authorization header:
+                  <code className="ml-2 px-2 py-1 bg-background rounded text-xs">Authorization: Bearer YOUR_ADMIN_TOKEN</code>
+                </p>
+              </div>
+
               <ApiEndpointCard
                 method="GET"
-                endpoint={`/api/v1/tables`}
-                description={`List all records in the tables table`}
-                table={table}
+                endpoint={`/api/v1/schemas`}
+                description="List all entity schemas"
                 operation="list"
               />
 
               <ApiEndpointCard
                 method="GET"
-                endpoint={`/api/v1/tables/{id}`}
-                description="Get a specific record by ID"
-                table={table}
+                endpoint={`/api/v1/schemas/{ENTITY_SCHEMA_NAME_OR_ID}`}
+                description="Get a specific entity schema by name or ID"
                 operation="get"
               />
 
               <ApiEndpointCard
                 method="POST"
-                endpoint={`/api/v1/tables`}
-                description="Create a new record"
-                table={table}
+                endpoint={`/api/v1/schemas`}
+                description="Create a new entity schema"
                 operation="create"
               />
 
               <ApiEndpointCard
                 method="PATCH"
-                endpoint={`/api/v1/tables/{id}`}
-                description="Update a specific record"
-                table={table}
+                endpoint={`/api/v1/schemas/{ENTITY_SCHEMA_NAME_OR_ID}`}
+                description="Update an existing entity schema"
                 operation="update"
               />
 
               <ApiEndpointCard
                 method="DELETE"
-                endpoint={`/api/v1/tables/{id}`}
-                description="Delete a specific record"
-                table={table}
+                endpoint={`/api/v1/schemas/{ENTITY_SCHEMA_NAME_OR_ID}`}
+                description="Delete an entity schema"
                 operation="delete"
               />
             </div>
@@ -92,13 +95,11 @@ function ApiEndpointCard({
   method,
   endpoint,
   description,
-  table,
   operation,
 }: {
   method: string
   endpoint: string
   description: string
-  table: TableMetadata
   operation: string
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -123,29 +124,86 @@ function ApiEndpointCard({
   }
 
   const generateRequestExample = () => {
-    const baseUrl = "https://your-api.com"
+    const baseUrl = "{{MANTISBASE_BASE_URL}}"
     let example = `curl -X ${method} "${baseUrl}${endpoint}"`
 
-    if (method !== "GET") {
-      example += ` \\\n  -H "Content-Type: application/json"`
-    }
+    example += ` \\\n  -H "Content-Type: application/json"`
+    example += ` \\\n  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"`
 
-    example += ` \\\n  -H "Authorization: Bearer YOUR_TOKEN"`
-
-    if (operation === "create" || operation === "update") {
-      const sampleData: any = {}
-      table?.schema?.fields?.forEach((field) => {
-        if (field.name === "id" || field.name === "created" || field.name === "updated") return
-        if (field.name === "email") {
-          sampleData[field.name] = "user@example.com"
-        } else if (field.name === "password") {
-          sampleData[field.name] = "securepassword"
-        } else {
-          sampleData[field.name] = `sample_${field.name}`
+    if (operation === "create") {
+      const sampleSchema = {
+        name: "example_entity",
+        type: "base",
+        schema: {
+          fields: [
+            {
+              name: "title",
+              type: "string",
+              primary_key: false,
+              required: true,
+              system: false,
+              unique: false,
+              constraints: {
+                default_value: null,
+                max_value: null,
+                min_value: null,
+                validator: null
+              }
+            }
+          ],
+          rules: {
+            add: { expr: "", mode: "auth" },
+            delete: { expr: "", mode: "auth" },
+            get: { expr: "", mode: "auth" },
+            list: { expr: "", mode: "auth" },
+            update: { expr: "", mode: "auth" }
+          }
         }
-      })
-
-      example += ` \\\n  -d '${JSON.stringify(sampleData, null, 2)}'`
+        // For view types, also include: view_query: "CREATE VIEW ... AS SELECT ..."
+      }
+      example += ` \\\n  -d '${JSON.stringify(sampleSchema, null, 2)}'`
+    } else if (operation === "update") {
+      const sampleUpdate = {
+        name: "updated_entity_name",
+        schema: {
+          fields: [
+            {
+              id: "mbf_existing_field_id",
+              name: "updated_field_name",
+              type: "string",
+              primary_key: false,
+              required: true,
+              system: false,
+              unique: false,
+              constraints: {
+                default_value: null,
+                max_value: null,
+                min_value: null,
+                validator: null
+              }
+            },
+            {
+              name: "new_field",
+              type: "string",
+              primary_key: false,
+              required: false,
+              system: false,
+              unique: false,
+              constraints: {
+                default_value: null,
+                max_value: null,
+                min_value: null,
+                validator: null
+              }
+            },
+            {
+              id: "mbf_field_to_delete",
+              op: "delete"
+            }
+          ]
+        }
+      }
+      example += ` \\\n  -d '${JSON.stringify(sampleUpdate, null, 2)}'`
     }
 
     return example
@@ -153,30 +211,160 @@ function ApiEndpointCard({
 
   const generateResponseExample = () => {
     if (operation === "list") {
-      const sampleRecord: any = {}
-      table?.schema?.fields?.forEach((field) => {
-        if (field.name === "id") {
-          sampleRecord[field.name] = "123e4567-e89b-12d3-a456-426614174000"
-        } else if (field.name === "created" || field.name === "updated") {
-          sampleRecord[field.name] = "2024-01-15T10:00:00Z"
-        } else if (field.name === "email") {
-          sampleRecord[field.name] = "user@example.com"
-        } else if (field.name === "password") {
-          return // Don't include password in response
-        } else {
-          sampleRecord[field.name] = `sample_${field.name}`
-        }
-      })
-
+      // List schemas - NOT paginated, returns direct array
       return JSON.stringify(
         {
-          data: [sampleRecord],
-          pagination: {
-            page: 1,
-            limit: 20,
-            total: 1,
-            pages: 1,
-          },
+          data: [
+            {
+              created: "2025-12-05 02:08:06",
+              id: "mbt_7691163245302450708",
+              schema: {
+                fields: [
+                  {
+                    constraints: {
+                      default_value: null,
+                      max_value: null,
+                      min_value: null,
+                      validator: "@password"
+                    },
+                    id: "mbf_14258576900392064537",
+                    name: "id",
+                    primary_key: true,
+                    required: true,
+                    system: true,
+                    type: "string",
+                    unique: false
+                  },
+                  {
+                    constraints: {
+                      default_value: null,
+                      max_value: null,
+                      min_value: null,
+                      validator: null
+                    },
+                    id: "mbf_13735287961322938256",
+                    name: "created",
+                    primary_key: false,
+                    required: true,
+                    system: true,
+                    type: "date",
+                    unique: false
+                  },
+                  {
+                    constraints: {
+                      default_value: null,
+                      max_value: null,
+                      min_value: null,
+                      validator: null
+                    },
+                    id: "mbf_9124719522053273721",
+                    name: "updated",
+                    primary_key: false,
+                    required: true,
+                    system: true,
+                    type: "date",
+                    unique: false
+                  },
+                  {
+                    constraints: {
+                      default_value: [],
+                      max_value: null,
+                      min_value: null,
+                      validator: null
+                    },
+                    id: "mbf_16766180539469268884",
+                    name: "avatar",
+                    primary_key: false,
+                    required: true,
+                    system: false,
+                    type: "files",
+                    unique: false
+                  }
+                ],
+                has_api: true,
+                id: "mbt_7691163245302450708",
+                name: "test_new",
+                rules: {
+                  add: { expr: "", mode: "" },
+                  delete: { expr: "", mode: "auth" },
+                  get: { expr: "", mode: "auth" },
+                  list: { expr: "", mode: "auth" },
+                  update: { expr: "", mode: "auth" }
+                },
+                system: false,
+                type: "base"
+              },
+              updated: "2025-12-10 23:24:46"
+            },
+            {
+              created: "2025-12-12 16:21:45",
+              id: "mbt_15118982290295364091",
+              schema: {
+                fields: [
+                  {
+                    constraints: {
+                      default_value: null,
+                      max_value: null,
+                      min_value: null,
+                      validator: "@password"
+                    },
+                    id: "mbf_14258576900392064537",
+                    name: "id",
+                    primary_key: true,
+                    required: true,
+                    system: true,
+                    type: "string",
+                    unique: false
+                  },
+                  {
+                    constraints: {
+                      default_value: null,
+                      max_value: null,
+                      min_value: null,
+                      validator: null
+                    },
+                    id: "mbf_13735287961322938256",
+                    name: "created",
+                    primary_key: false,
+                    required: true,
+                    system: true,
+                    type: "date",
+                    unique: false
+                  },
+                  {
+                    constraints: {
+                      default_value: null,
+                      max_value: null,
+                      min_value: null,
+                      validator: null
+                    },
+                    id: "mbf_9124719522053273721",
+                    name: "updated",
+                    primary_key: false,
+                    required: true,
+                    system: true,
+                    type: "date",
+                    unique: false
+                  }
+                ],
+                has_api: true,
+                id: "mbt_15118982290295364091",
+                name: "test",
+                rules: {
+                  add: { expr: "", mode: "auth" },
+                  delete: { expr: "", mode: "auth" },
+                  get: { expr: "", mode: "auth" },
+                  list: { expr: "", mode: "auth" },
+                  update: { expr: "", mode: "auth" }
+                },
+                system: false,
+                type: "base"
+              },
+              updated: "2025-12-12 16:21:45"
+            }
+          ],
+          error: "",
+          status: 200
         },
         null,
         2,
@@ -184,26 +372,99 @@ function ApiEndpointCard({
     }
 
     if (operation === "delete") {
-      return JSON.stringify({}, null, 2)
+      return "Status: 204 No Content"
     }
 
-    // Single record response
-    const sampleRecord: any = {}
-    table?.schema?.fields?.forEach((field) => {
-      if (field.name === "id") {
-        sampleRecord[field.name] = "123e4567-e89b-12d3-a456-426614174000"
-      } else if (field.name === "created" || field.name === "updated") {
-        sampleRecord[field.name] = "2024-01-15T10:00:00Z"
-      } else if (field.name === "email") {
-        sampleRecord[field.name] = "user@example.com"
-      } else if (field.name === "password") {
-        return // Don't include password in response
-      } else {
-        sampleRecord[field.name] = `sample_${field.name}`
-      }
-    })
-
-    return JSON.stringify(sampleRecord, null, 2)
+    // Single schema response (get, create, or update)
+    return JSON.stringify(
+      {
+        data: {
+          created: "2025-12-05 02:08:06",
+          id: "mbt_7691163245302450708",
+          schema: {
+            fields: [
+              {
+                constraints: {
+                  default_value: null,
+                  max_value: null,
+                  min_value: null,
+                  validator: "@password"
+                },
+                id: "mbf_14258576900392064537",
+                name: "id",
+                primary_key: true,
+                required: true,
+                system: true,
+                type: "string",
+                unique: false
+              },
+              {
+                constraints: {
+                  default_value: null,
+                  max_value: null,
+                  min_value: null,
+                  validator: null
+                },
+                id: "mbf_13735287961322938256",
+                name: "created",
+                primary_key: false,
+                required: true,
+                system: true,
+                type: "date",
+                unique: false
+              },
+              {
+                constraints: {
+                  default_value: null,
+                  max_value: null,
+                  min_value: null,
+                  validator: null
+                },
+                id: "mbf_9124719522053273721",
+                name: "updated",
+                primary_key: false,
+                required: true,
+                system: true,
+                type: "date",
+                unique: false
+              },
+              {
+                constraints: {
+                  default_value: [],
+                  max_value: null,
+                  min_value: null,
+                  validator: null
+                },
+                id: "mbf_16766180539469268884",
+                name: "avatar",
+                primary_key: false,
+                required: true,
+                system: false,
+                type: "files",
+                unique: false
+              }
+            ],
+            has_api: true,
+            id: "mbt_7691163245302450708",
+            name: "test_new",
+            rules: {
+              add: { expr: "", mode: "" },
+              delete: { expr: "", mode: "auth" },
+              get: { expr: "", mode: "auth" },
+              list: { expr: "", mode: "auth" },
+              update: { expr: "", mode: "auth" }
+            },
+            system: false,
+            type: "base"
+          },
+          updated: "2025-12-10 23:24:46"
+        },
+        error: "",
+        status: operation === "create" ? 201 : 200
+      },
+      null,
+      2,
+    )
   }
 
   const requestExample = generateRequestExample()
@@ -264,33 +525,27 @@ function ApiEndpointCard({
                 <Badge variant="destructive" className="text-xs">
                   400
                 </Badge>
-                <span>Bad Request - Invalid input data</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="destructive" className="text-xs">
-                  401
-                </Badge>
-                <span>Unauthorized - Invalid or missing token</span>
+                <span>Bad Request - Parsing error (message will be provided)</span>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="destructive" className="text-xs">
                   403
                 </Badge>
-                <span>Forbidden - Access denied by rules</span>
+                <span>Forbidden - Auth error (admin token required)</span>
               </div>
               {(operation === "get" || operation === "update" || operation === "delete") && (
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="text-xs">
                     404
                   </Badge>
-                  <span>Not Found - Record does not exist</span>
+                  <span>Not Found - Resource/item not found</span>
                 </div>
               )}
               <div className="flex items-center gap-2">
                 <Badge variant="destructive" className="text-xs">
                   500
                 </Badge>
-                <span>Internal Server Error - Server error</span>
+                <span>Internal Server Error</span>
               </div>
             </div>
           </div>

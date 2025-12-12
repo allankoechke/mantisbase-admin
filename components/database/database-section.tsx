@@ -274,7 +274,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
         )}
       </div>
 
-      {/* Open docs on table CRUD */}
+      {/* Entity Schema API Documentation */}
       <TableDocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
     </div>
   )
