@@ -4,33 +4,45 @@ import type { AppMode } from "./app-state"
 
 
 // Updated interfaces to match the API response format
+export interface FieldConstraints {
+  default_value: any
+  max_value: number | null
+  min_value: number | null
+  validator: string | null
+}
+
 export interface TableField {
-  autoGeneratePattern: string | null
-  defaultValue: string | null
-  maxValue: number | null
-  minValue: number | null
+  id: string
   name: string
-  old_name: string | null
-  primaryKey: boolean
+  primary_key: boolean
   required: boolean
   system: boolean
   type: string
   unique: boolean
-  validator: string | null
+  constraints: FieldConstraints
+}
+
+export interface RuleConfig {
+  expr: string
+  mode: string
+}
+
+export interface SchemaRules {
+  add: RuleConfig
+  delete: RuleConfig
+  get: RuleConfig
+  list: RuleConfig
+  update: RuleConfig
 }
 
 export interface TableSchema {
-  addRule: string
-  deleteRule: string
   fields: TableField[]
-  getRule: string
   has_api: boolean
   id: string
-  listRule: string
   name: string
+  rules: SchemaRules
   system: boolean
   type: "base" | "auth" | "view"
-  updateRule: string
   sql?: string
 }
 
@@ -129,10 +141,29 @@ export class ApiClient {
       const responseData = await response.json()
 
       // Ensure the structure always matches ApiResponse<T>
+      // The API should always return { data: ..., status: ..., error: ... }
+      // Handle both HTTP status and JSON body status
+      const jsonStatus = responseData.status ?? response.status
+      const jsonError = responseData.error ?? ""
+      
+      // Extract data from response - should be an array for list endpoints
+      let data = responseData.data
+      
+      // If data is missing, check if the entire response is an array (fallback)
+      if (data === undefined || data === null) {
+        // If responseData itself is an array, use it
+        if (Array.isArray(responseData)) {
+          data = responseData as T
+        } else {
+          // Otherwise default based on expected type
+          data = ({} as T)
+        }
+      }
+
       return {
-        data: responseData.data ?? {},
-        error: responseData.error ?? "",
-        status: response.status,
+        data: data,
+        error: jsonError,
+        status: jsonStatus,
       }
     } catch (error: any) {
       return {
@@ -147,19 +178,34 @@ export class ApiClient {
     try {
       let response: ApiResponse<T> = await this.realApiCall<T>(endpoint, options)
 
-      // Unauthorized handling
+      // Unauthorized handling - check both HTTP status and JSON status
       if (response.status === 401 || response.status === 403) {
         this.onUnauthorized(response.error || "Unauthorized")
         throw new Error(response.error || "Unauthorized")
       }
 
-      // General error handling
-      if (response.status >= 400 || response.status <= 0 || response.error) {
-        if(response.error === "Failed to fetch") response.error = `Failed to fetch '${endpoint}'. Could not reach the server!`
-        this.onError?.(response.error || "Request failed", "error")
-        throw new Error(response.error || "Request failed")
+      // General error handling - check JSON status from API response
+      // The API returns status in the JSON body: { data: [], status: 200, error: "" }
+      // Only treat as error if status >= 400 or error string is non-empty
+      if (response.status >= 400 || response.status <= 0) {
+        const errorMsg = response.error && response.error.length > 0 
+          ? response.error 
+          : "Request failed"
+        if(errorMsg === "Failed to fetch") {
+          const finalError = `Failed to fetch '${endpoint}'. Could not reach the server!`
+          this.onError?.(finalError, "error")
+          throw new Error(finalError)
+        }
+        this.onError?.(errorMsg, "error")
+        throw new Error(errorMsg)
+      }
+      
+      // If there's an error message but status is OK, log it but don't throw
+      if (response.error && response.error.length > 0) {
+        console.warn(`API warning for ${endpoint}:`, response.error)
       }
 
+      // Return the data - should be an array for list endpoints
       return response.data
     } catch (error: any) {
       return {
@@ -171,30 +217,51 @@ export class ApiClient {
   }
 }
 
+export interface LoginResponse {
+  token: string
+  user: Admin
+}
+
 export async function loginWithPassword(
   email: string,
   password: string
-) {
-  // Real API call
+): Promise<LoginResponse> {
+  // Real API call to /api/v1/auth/login
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/admins/auth-with-password`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", },
-      body: JSON.stringify({ email, password }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identity: email,
+        password: password,
+        entity: "mb_admins"
+      }),
     })
 
-    const responseData = await response.json()
+    // Handle non-JSON responses
+    let responseData: any
+    try {
+      responseData = await response.json()
+    } catch (jsonError) {
+      throw new Error("Invalid response from server")
+    }
 
-    if (response.ok) {
-      // Check if response follows our API structure
-      if (responseData.data) {
-        return responseData.data
+    // Handle response structure: { status, data: { token, user }, error }
+    if (responseData.status === 200 && responseData.data && responseData.data.token) {
+      return {
+        token: responseData.data.token,
+        user: responseData.data.user
       }
-      return responseData.data
     } else {
-      throw new Error(responseData.error || responseData.message || "Login failed")
+      // Handle error response
+      const errorMessage = responseData.error || responseData.message || "Login failed"
+      throw new Error(errorMessage)
     }
   } catch (error: any) {
+    // Re-throw if it's already an Error with a message
+    if (error instanceof Error) {
+      throw error
+    }
     throw new Error(error.message || "Network error occurred")
   }
 }

@@ -29,7 +29,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              <DrawerTitle>API Documentation - {table.name}</DrawerTitle>
+              <DrawerTitle>API Documentation - {table.schema.name}</DrawerTitle>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -43,15 +43,15 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
             <div className="p-6 space-y-6">
               <ApiEndpointCard
                 method="GET"
-                endpoint={`/api/v1/${table.name}`}
-                description={`List all records in the ${table.name} table`}
+                endpoint={`/api/v1/entities/${table.schema.name}`}
+                description={`List all records in the ${table.schema.name} table`}
                 table={table}
                 operation="list"
               />
 
               <ApiEndpointCard
                 method="GET"
-                endpoint={`/api/v1/${table.name}/{id}`}
+                endpoint={`/api/v1/entities/${table.schema.name}/{id}`}
                 description="Get a specific record by ID"
                 table={table}
                 operation="get"
@@ -61,7 +61,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
                 <>
                   <ApiEndpointCard
                     method="POST"
-                    endpoint={`/api/v1/${table.name}`}
+                    endpoint={`/api/v1/entities/${table.schema.name}`}
                     description="Create a new record"
                     table={table}
                     operation="create"
@@ -69,7 +69,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
 
                   <ApiEndpointCard
                     method="PATCH"
-                    endpoint={`/api/v1/${table.name}/{id}`}
+                    endpoint={`/api/v1/entities/${table.schema.name}/{id}`}
                     description="Update a specific record"
                     table={table}
                     operation="update"
@@ -77,7 +77,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
 
                   <ApiEndpointCard
                     method="DELETE"
-                    endpoint={`/api/v1/${table.name}/{id}`}
+                    endpoint={`/api/v1/entities/${table.schema.name}/{id}`}
                     description="Delete a specific record"
                     table={table}
                     operation="delete"

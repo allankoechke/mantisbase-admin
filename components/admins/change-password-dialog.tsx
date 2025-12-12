@@ -38,7 +38,7 @@ export function ChangePasswordDialog({ admin, apiClient, onClose }: ChangePasswo
     setError("")
 
     try {
-      const res: any = await apiClient.call(`/api/v1/admins/${admin.id}`, {
+      const res: any = await apiClient.call(`/api/v1/entities/mb_admins/${admin.id}`, {
         method: "PATCH",
         body: JSON.stringify({ password: newPassword }),
       })

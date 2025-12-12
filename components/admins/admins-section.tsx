@@ -28,91 +28,141 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
 
   const table: any = {
     has_api: true,
-    name: "admins",
+    name: "mb_admins",
     system: true,
     type: "auth",
     schema: {
+      id: "mbt_10394585042835534856",
+      name: "mb_admins",
+      has_api: true,
+      system: true,
+      type: "auth",
       fields: [
         {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: null,
+          id: "mbf_14258576900392064537",
           name: "id",
-          primaryKey: true,
+          primary_key: true,
           required: true,
           system: true,
           type: "string",
           unique: false,
-          validator: null
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: "@password"
+          }
         },
         {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: 5.0,
+          id: "mbf_13735287961322938256",
+          name: "created",
+          primary_key: false,
+          required: true,
+          system: true,
+          type: "date",
+          unique: false,
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: null
+          }
+        },
+        {
+          id: "mbf_9124719522053273721",
+          name: "updated",
+          primary_key: false,
+          required: true,
+          system: true,
+          type: "date",
+          unique: false,
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: null
+          }
+        },
+        {
+          id: "mbf_16339674465020246541",
           name: "email",
-          primaryKey: false,
+          primary_key: false,
           required: true,
           system: true,
           type: "string",
           unique: true,
-          validator: "email"
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: "@email"
+          }
         },
         {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: 8.0,
+          id: "mbf_6072375419398818283",
           name: "password",
-          primaryKey: false,
+          primary_key: false,
           required: true,
           system: true,
           type: "string",
           unique: false,
-          validator: "password"
-        },
-        {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: null,
-          name: "created",
-          primaryKey: false,
-          required: true,
-          system: true,
-          type: "date",
-          unique: false,
-          validator: null
-        },
-        {
-          autoGeneratePattern: null,
-          defaultValue: null,
-          maxValue: null,
-          minValue: null,
-          name: "updated",
-          primaryKey: false,
-          required: true,
-          system: true,
-          type: "date",
-          unique: false,
-          validator: null
+          constraints: {
+            default_value: null,
+            max_value: null,
+            min_value: null,
+            validator: "@password"
+          }
         }
       ],
+      rules: {
+        add: {
+          expr: "",
+          mode: "auth"
+        },
+        delete: {
+          expr: "",
+          mode: "auth"
+        },
+        get: {
+          expr: "",
+          mode: "auth"
+        },
+        list: {
+          expr: "",
+          mode: "auth"
+        },
+        update: {
+          expr: "",
+          mode: "auth"
+        }
+      }
     }
   };
 
   const handleDeleteAdmin = async (adminId: string) => {
     try {
-      const res: any = await apiClient.call(`/api/v1/admins/${adminId}`, { method: "DELETE" })
+      const res: any = await apiClient.call(`/api/v1/entities/mb_admins/${adminId}`, { method: "DELETE" })
 
       // If the request failed, throw the error here 
       if (res?.error?.length > 0) throw res.error
 
-      const updatedAdmins = await apiClient.call<Admin[]>("/api/v1/admins")
+      const response: any = await apiClient.call("/api/v1/entities/mb_admins")
 
       // If the request failed, throw the error here 
-      if (updatedAdmins?.error?.length > 0) throw updatedAdmins.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle paginated response structure: { items: [...], items_count, page, page_size, total_count }
+      let updatedAdmins: Admin[] = []
+      if (Array.isArray(response)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        updatedAdmins = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        // Paginated response: extract items from data object
+        updatedAdmins = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        // If data is nested
+        updatedAdmins = response.data.items
+      }
 
       onAdminsUpdate(updatedAdmins)
 
@@ -130,19 +180,34 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
     onAdminsUpdate([...admins, admin])
 
     toast({
-      variant: "destructive",
-      title: "Admin Added",
+      title: "Admin User Added",
       description: "Admin account added successfully!",
     })
+
+    setAddingAdmin(false)
   }
 
   const handleReload = async () => {
     try {
       setIsLoading(true)
-      const updatedAdmins = await apiClient.call<Admin[]>("/api/v1/admins")
+      const response: any = await apiClient.call("/api/v1/entities/mb_admins")
+      
+      // Handle paginated response structure: { items: [...], items_count, page, page_size, total_count }
+      let updatedAdmins: Admin[] = []
+      if (Array.isArray(response)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        updatedAdmins = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        // Paginated response: extract items from data object
+        updatedAdmins = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        // If data is nested
+        updatedAdmins = response.data.items
+      }
+      
       onAdminsUpdate(updatedAdmins)
     } catch (error) {
-      console.error("Failed to delete admin:", error)
+      console.error("Failed to reload admins:", error)
     } finally {
       setIsLoading(false)
     }

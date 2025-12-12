@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginWithPassword } from "@/lib/api"
-import { useAppState } from "@/lib/app-state"
 
 interface LoginFormProps {
   onLogin: (token: string) => void
@@ -21,7 +20,6 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const [showPassword, setShowPassword] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState("")
-  const { mode } = useAppState()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,7 +27,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     setError("")
 
     try {
-      const data = await loginWithPassword(email, password, mode)
+      const data = await loginWithPassword(email, password)
       localStorage.setItem("admin_token", data.token)
       onLogin(data.token)
     } catch (err: any) {

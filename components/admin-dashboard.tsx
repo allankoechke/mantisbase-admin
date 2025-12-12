@@ -62,8 +62,15 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   const showError = React.useCallback(
     (error: string, type: "error" | "warning" = "error") => {
       try {
-        // Prevent error loops by checking if error is already being shown
-        if (error.includes("Unauthorized") || error.includes("auth")) {
+        // Prevent error toasts for auth errors (401/403) - these are handled by the auth dialog
+        const errorLower = error.toLowerCase()
+        if (
+          errorLower.includes("unauthorized") || 
+          errorLower.includes("forbidden") ||
+          errorLower.includes("auth") ||
+          errorLower.includes("403") ||
+          errorLower.includes("401")
+        ) {
           return // Don't show toast for auth errors, handle with dialog
         }
 
@@ -84,7 +91,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     try {
       setAuthErrorReason(reason || "")  // Set the auth error string
       setAuthErrorDialog(true)    // Set the auth dialog to open
-      handleLogout()
+      // Don't call handleLogout() here - let the dialog handle navigation
     } catch (error) {
       console.warn("Failed to handle unauthorized:", error)
     }
@@ -124,13 +131,34 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       setLoading(true)
 
       const [tablesData, adminsData, settingsData] = await Promise.all([
-        apiClient.call<TableMetadata[]>("/api/v1/tables"),
-        apiClient.call<Admin[]>("/api/v1/admins"),
+        apiClient.call<any>("/api/v1/schemas"),
+        apiClient.call<any>("/api/v1/entities/mb_admins"),
         apiClient.call<AppSettings>("/api/v1/settings/config"),
       ])
 
-      setTables(tablesData)
-      setAdmins(adminsData)
+      // Ensure tablesData is an array - handle different response structures
+      let tablesArray: TableMetadata[] = []
+      if (Array.isArray(tablesData)) {
+        tablesArray = tablesData
+      } else if (tablesData?.data && Array.isArray(tablesData.data)) {
+        tablesArray = tablesData.data
+      }
+      console.log("Tables data received:", tablesData, "Is array:", Array.isArray(tablesData), "Array length:", tablesArray.length)
+      setTables(tablesArray)
+      
+      // Ensure adminsData is an array - handle paginated response
+      let adminsArray: Admin[] = []
+      if (Array.isArray(adminsData)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        adminsArray = adminsData
+      } else if (adminsData?.items && Array.isArray(adminsData.items)) {
+        // Paginated response: extract items from data object
+        adminsArray = adminsData.items
+      } else if (adminsData?.data?.items && Array.isArray(adminsData.data.items)) {
+        // If data is nested
+        adminsArray = adminsData.data.items
+      }
+      setAdmins(adminsArray)
       setSettings(settingsData)
     } catch (error) {
       console.error("Failed to load data:", error)
@@ -151,9 +179,17 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   const handleAuthErrorLogin = () => {
     try {
       setAuthErrorDialog(false)
+      // Always navigate to login and discard token, regardless of button clicked
       handleLogout()
     } catch (error) {
       console.warn("Failed to handle auth error login:", error)
+    }
+  }
+
+  const handleAuthErrorDialogClose = (open: boolean) => {
+    // If dialog is being closed (either by Cancel or X button), navigate to login
+    if (!open) {
+      handleAuthErrorLogin()
     }
   }
 
@@ -212,7 +248,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       <div className="flex min-h-screen w-full items-center justify-center">
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading dashboard...</p>
+          <p className="text-muted-foreground">Loading MantisBase Admin Dashboard...</p>
         </div>
       </div>
     )
@@ -353,7 +389,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       </div>
 
       {/* Auth Error Dialog */}
-      <Dialog open={authErrorDialog} onOpenChange={setAuthErrorDialog}>
+      <Dialog open={authErrorDialog} onOpenChange={handleAuthErrorDialogClose}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -373,7 +409,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
             }
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAuthErrorDialog(false)}>
+            <Button variant="outline" onClick={handleAuthErrorLogin}>
               Cancel
             </Button>
             <Button onClick={handleAuthErrorLogin}>Login Again</Button>

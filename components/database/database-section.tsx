@@ -47,12 +47,12 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   React.useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (route.path === "/entities" || route.path === "/entities/:name") {
-        const queryParams = searchTerm ? { filter: searchTerm } : {}
-        if (route.pathParams.name) {
-          navigate("/entities/:name", { name: route.pathParams.name }, queryParams)
-        } else {
-          navigate("/entities", undefined, queryParams)
-        }
+    const queryParams: Record<string, string> = searchTerm ? { filter: searchTerm } : {}
+    if (route.pathParams.name) {
+      navigate("/entities/:name", { name: route.pathParams.name }, queryParams)
+    } else {
+      navigate("/entities", undefined, queryParams)
+    }
       }
     }, 300) // Debounce for 300ms
 
@@ -62,20 +62,28 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   // Get selected entity name from path params
   const selectedEntityName = route.pathParams.name || null
 
-  const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table.name.toLowerCase().includes(searchTerm.toLowerCase())) : []
+  const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table?.schema?.name?.toLowerCase().includes(searchTerm.toLowerCase())) : []
 
   const handleDeleteTable = async (tableId: string) => {
     try {
-      const res: any = await apiClient.call(`/api/v1/tables/${tableId}`, { method: "DELETE" })
+      const res: any = await apiClient.call(`/api/v1/schemas/${tableId}`, { method: "DELETE" })
 
       // If the request failed, throw the error here 
       if (res?.error?.length > 0) throw res.error
 
       // Fetch new tables
-      const updatedTables = await apiClient.call<TableMetadata[]>("/api/v1/tables")
+      const response: any = await apiClient.call("/api/v1/schemas")
 
       // If the request failed, throw the error here 
-      if (updatedTables?.error?.length > 0) throw updatedTables.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle different response structures
+      let updatedTables: TableMetadata[] = []
+      if (Array.isArray(response)) {
+        updatedTables = response
+      } else if (response?.data && Array.isArray(response.data)) {
+        updatedTables = response.data
+      }
 
       // Set the new tables
       onTablesUpdate(updatedTables)
@@ -106,10 +114,18 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      const updatedTables = await apiClient.call<TableMetadata[]>("/api/v1/tables")
+      const response: any = await apiClient.call("/api/v1/schemas")
 
       // If the request failed, throw the error here 
-      if (updatedTables?.error?.length > 0) throw updatedTables.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle different response structures
+      let updatedTables: TableMetadata[] = []
+      if (Array.isArray(response)) {
+        updatedTables = response
+      } else if (response?.data && Array.isArray(response.data)) {
+        updatedTables = response.data
+      }
 
       onTablesUpdate(updatedTables)
     } catch (error) {
@@ -120,7 +136,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   }
 
   const selectedEntity = selectedEntityName
-    ? Array.isArray(tables) ? tables.find((t) => t.name === selectedEntityName) : null
+    ? Array.isArray(tables) ? tables.find((t) => t.schema.name === selectedEntityName) : null
     : null
 
   return (
@@ -166,28 +182,28 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
             <div className="p-2 space-y-1">
               {filteredTables.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  {searchTerm ? "No entities found" : "No entities"}
+                  {searchTerm ? "No entities found matching the search term" : "No entities, add some to get started"}
                 </div>
               ) : (
                 filteredTables.map((table) => (
                   <button
                     key={table.id}
-                    onClick={() => handleEntityClick(table.name)}
+                    onClick={() => handleEntityClick(table.schema.name)}
                     className={cn(
                       "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent",
-                      selectedEntityName === table.name && "bg-accent text-accent-foreground"
+                      selectedEntityName === table.schema.name && "bg-accent text-accent-foreground"
                     )}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Table className="h-4 w-4 flex-shrink-0" />
-                        <span className="font-medium truncate">{table.name}</span>
+                        <span className="font-medium truncate">{table.schema.name}</span>
                       </div>
                       <Badge
-                        variant={table.type === "auth" ? "default" : table.type === "view" ? "secondary" : "outline"}
+                        variant={table.schema.type === "auth" ? "default" : table.schema.type === "view" ? "secondary" : "outline"}
                         className="text-xs flex-shrink-0 ml-2"
                       >
-                        {table.type}
+                        {table.schema.type}
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
