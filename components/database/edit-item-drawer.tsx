@@ -193,7 +193,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
         return;
       }
       
-      const updatedItem = await apiClient.call<any>(`/api/v1/${table.name}/${formData["id"]}`, {
+      const updatedItem = await apiClient.call<any>(`/api/v1/entities/${table.name}/${formData["id"]}`, {
         method: "PATCH",
         body: body,
       })

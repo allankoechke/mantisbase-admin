@@ -82,7 +82,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
       const body = prepareRequestBody(formData, tableFields);
       console.log("Body: ", body)
 
-      const createdItem = await apiClient.call<any>(`/api/v1/${table.name}`, {
+      const createdItem = await apiClient.call<any>(`/api/v1/entities/${table.name}`, {
         method: "POST",
         body: body,
       })

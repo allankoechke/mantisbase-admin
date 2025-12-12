@@ -47,12 +47,12 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   React.useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (route.path === "/entities" || route.path === "/entities/:name") {
-        const queryParams = searchTerm ? { filter: searchTerm } : {}
-        if (route.pathParams.name) {
-          navigate("/entities/:name", { name: route.pathParams.name }, queryParams)
-        } else {
-          navigate("/entities", undefined, queryParams)
-        }
+    const queryParams: Record<string, string> = searchTerm ? { filter: searchTerm } : {}
+    if (route.pathParams.name) {
+      navigate("/entities/:name", { name: route.pathParams.name }, queryParams)
+    } else {
+      navigate("/entities", undefined, queryParams)
+    }
       }
     }, 300) // Debounce for 300ms
 
@@ -62,7 +62,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   // Get selected entity name from path params
   const selectedEntityName = route.pathParams.name || null
 
-  const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table.name.toLowerCase().includes(searchTerm.toLowerCase())) : []
+  const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table?.name?.toLowerCase().includes(searchTerm.toLowerCase())) : []
 
   const handleDeleteTable = async (tableId: string) => {
     try {
@@ -72,10 +72,18 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
       if (res?.error?.length > 0) throw res.error
 
       // Fetch new tables
-      const updatedTables = await apiClient.call<TableMetadata[]>("/api/v1/tables")
+      const response: any = await apiClient.call("/api/v1/schemas")
 
       // If the request failed, throw the error here 
-      if (updatedTables?.error?.length > 0) throw updatedTables.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle different response structures
+      let updatedTables: TableMetadata[] = []
+      if (Array.isArray(response)) {
+        updatedTables = response
+      } else if (response?.data && Array.isArray(response.data)) {
+        updatedTables = response.data
+      }
 
       // Set the new tables
       onTablesUpdate(updatedTables)
@@ -106,10 +114,18 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      const updatedTables = await apiClient.call<TableMetadata[]>("/api/v1/tables")
+      const response: any = await apiClient.call("/api/v1/schemas")
 
       // If the request failed, throw the error here 
-      if (updatedTables?.error?.length > 0) throw updatedTables.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle different response structures
+      let updatedTables: TableMetadata[] = []
+      if (Array.isArray(response)) {
+        updatedTables = response
+      } else if (response?.data && Array.isArray(response.data)) {
+        updatedTables = response.data
+      }
 
       onTablesUpdate(updatedTables)
     } catch (error) {
@@ -166,7 +182,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
             <div className="p-2 space-y-1">
               {filteredTables.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  {searchTerm ? "No entities found" : "No entities"}
+                  {searchTerm ? "No entities found matching the search term" : "No entities, add some to get started"}
                 </div>
               ) : (
                 filteredTables.map((table) => (

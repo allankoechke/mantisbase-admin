@@ -72,10 +72,26 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     setIsLoading(true)
 
     try {
-      const tableData = await apiClient.call<any>(`/api/v1/${table.name}`)
+      const response = await apiClient.call<any>(`/api/v1/entities/${table.name}`)
 
       // If the request failed, throw the error here 
-      if (tableData?.error?.length > 0) throw tableData.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle paginated response structure: { items: [...], items_count, page, page_size, total_count }
+      let tableData: any[] = []
+      if (Array.isArray(response)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        tableData = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        // Paginated response: extract items from data object
+        tableData = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        // If data is nested
+        tableData = response.data.items
+      } else {
+        console.warn("Unexpected response format:", response)
+        tableData = []
+      }
 
       setTableData(tableData)
 
@@ -83,6 +99,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
       setSelectedItems([]) // Clear selection on reload
     } catch (error) {
       console.error("Failed to load table data:", error)
+      setTableData([]) // Set empty array on error
     } finally {
       setIsLoading(false)
     }
@@ -149,7 +166,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     try {
       // Delete each selected item individually
       const deletePromises = selectedItems.map((itemId) =>
-        apiClient.call(`/api/v1/${table.name}/${itemId}`, { method: "DELETE" }),
+        apiClient.call(`/api/v1/entities/${table.name}/${itemId}`, { method: "DELETE" }),
       )
 
       await Promise.all(deletePromises)

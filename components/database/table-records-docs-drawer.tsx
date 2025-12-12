@@ -43,7 +43,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
             <div className="p-6 space-y-6">
               <ApiEndpointCard
                 method="GET"
-                endpoint={`/api/v1/${table.name}`}
+                endpoint={`/api/v1/entities/${table.name}`}
                 description={`List all records in the ${table.name} table`}
                 table={table}
                 operation="list"
@@ -51,7 +51,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
 
               <ApiEndpointCard
                 method="GET"
-                endpoint={`/api/v1/${table.name}/{id}`}
+                endpoint={`/api/v1/entities/${table.name}/{id}`}
                 description="Get a specific record by ID"
                 table={table}
                 operation="get"
@@ -61,7 +61,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
                 <>
                   <ApiEndpointCard
                     method="POST"
-                    endpoint={`/api/v1/${table.name}`}
+                    endpoint={`/api/v1/entities/${table.name}`}
                     description="Create a new record"
                     table={table}
                     operation="create"
@@ -69,7 +69,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
 
                   <ApiEndpointCard
                     method="PATCH"
-                    endpoint={`/api/v1/${table.name}/{id}`}
+                    endpoint={`/api/v1/entities/${table.name}/{id}`}
                     description="Update a specific record"
                     table={table}
                     operation="update"
@@ -77,7 +77,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
 
                   <ApiEndpointCard
                     method="DELETE"
-                    endpoint={`/api/v1/${table.name}/{id}`}
+                    endpoint={`/api/v1/entities/${table.name}/{id}`}
                     description="Delete a specific record"
                     table={table}
                     operation="delete"

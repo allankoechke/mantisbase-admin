@@ -225,15 +225,23 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
         },
       }
 
-      const res: any = await apiClient.call("/api/v1/tables", {
+      const res: any = await apiClient.call("/api/v1/schemas", {
         method: "POST",
         body: JSON.stringify(tableData),
       })
 
       if (res?.error?.length > 0) throw res.error
 
-      const updatedTables = await apiClient.call<TableMetadata[]>("/api/v1/tables")
-      if (updatedTables?.error?.length > 0) throw updatedTables.error
+      const response: any = await apiClient.call("/api/v1/schemas")
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle different response structures
+      let updatedTables: TableMetadata[] = []
+      if (Array.isArray(response)) {
+        updatedTables = response
+      } else if (response?.data && Array.isArray(response.data)) {
+        updatedTables = response.data
+      }
 
       onTablesUpdate(updatedTables)
       setTableName("")

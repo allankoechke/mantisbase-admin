@@ -124,13 +124,34 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       setLoading(true)
 
       const [tablesData, adminsData, settingsData] = await Promise.all([
-        apiClient.call<TableMetadata[]>("/api/v1/tables"),
-        apiClient.call<Admin[]>("/api/v1/admins"),
+        apiClient.call<any>("/api/v1/schemas"),
+        apiClient.call<any>("/api/v1/entities/mb_admins"),
         apiClient.call<AppSettings>("/api/v1/settings/config"),
       ])
 
-      setTables(tablesData)
-      setAdmins(adminsData)
+      // Ensure tablesData is an array - handle different response structures
+      let tablesArray: TableMetadata[] = []
+      if (Array.isArray(tablesData)) {
+        tablesArray = tablesData
+      } else if (tablesData?.data && Array.isArray(tablesData.data)) {
+        tablesArray = tablesData.data
+      }
+      console.log("Tables data received:", tablesData, "Is array:", Array.isArray(tablesData), "Array length:", tablesArray.length)
+      setTables(tablesArray)
+      
+      // Ensure adminsData is an array - handle paginated response
+      let adminsArray: Admin[] = []
+      if (Array.isArray(adminsData)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        adminsArray = adminsData
+      } else if (adminsData?.items && Array.isArray(adminsData.items)) {
+        // Paginated response: extract items from data object
+        adminsArray = adminsData.items
+      } else if (adminsData?.data?.items && Array.isArray(adminsData.data.items)) {
+        // If data is nested
+        adminsArray = adminsData.data.items
+      }
+      setAdmins(adminsArray)
       setSettings(settingsData)
     } catch (error) {
       console.error("Failed to load data:", error)

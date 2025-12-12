@@ -104,15 +104,28 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
 
   const handleDeleteAdmin = async (adminId: string) => {
     try {
-      const res: any = await apiClient.call(`/api/v1/admins/${adminId}`, { method: "DELETE" })
+      const res: any = await apiClient.call(`/api/v1/entities/mb_admins/${adminId}`, { method: "DELETE" })
 
       // If the request failed, throw the error here 
       if (res?.error?.length > 0) throw res.error
 
-      const updatedAdmins = await apiClient.call<Admin[]>("/api/v1/admins")
+      const response: any = await apiClient.call("/api/v1/entities/mb_admins")
 
       // If the request failed, throw the error here 
-      if (updatedAdmins?.error?.length > 0) throw updatedAdmins.error
+      if (response?.error?.length > 0) throw response.error
+
+      // Handle paginated response structure: { items: [...], items_count, page, page_size, total_count }
+      let updatedAdmins: Admin[] = []
+      if (Array.isArray(response)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        updatedAdmins = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        // Paginated response: extract items from data object
+        updatedAdmins = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        // If data is nested
+        updatedAdmins = response.data.items
+      }
 
       onAdminsUpdate(updatedAdmins)
 
@@ -139,7 +152,21 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
   const handleReload = async () => {
     try {
       setIsLoading(true)
-      const updatedAdmins = await apiClient.call<Admin[]>("/api/v1/admins")
+      const response: any = await apiClient.call("/api/v1/entities/mb_admins")
+      
+      // Handle paginated response structure: { items: [...], items_count, page, page_size, total_count }
+      let updatedAdmins: Admin[] = []
+      if (Array.isArray(response)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        updatedAdmins = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        // Paginated response: extract items from data object
+        updatedAdmins = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        // If data is nested
+        updatedAdmins = response.data.items
+      }
+      
       onAdminsUpdate(updatedAdmins)
     } catch (error) {
       console.error("Failed to delete admin:", error)
