@@ -80,8 +80,6 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
     setIsLoading(true)
     try {
       const body = prepareRequestBody(formData, tableFields);
-      console.log("Body: ", body)
-
       const createdItem = await apiClient.call<any>(`/api/v1/entities/${table.name}`, {
         method: "POST",
         body: body,
@@ -96,7 +94,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
       toast({
         title: "Table Record Created",
         description: `The record was created successfully.`,
-        duration: 3000,
+        duration: 2000,
       })
     } catch (error) {
       console.error("Failed to create item:", error)

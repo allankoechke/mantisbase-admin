@@ -28,7 +28,7 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
 
   const table: any = {
     has_api: true,
-    name: "admins",
+    name: "mb_admins",
     system: true,
     type: "auth",
     schema: {
@@ -140,13 +140,15 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
   }
 
   const handleAdminAdded = (admin: Admin) => {
+    console.log("Admin to be added:", admin)
     onAdminsUpdate([...admins, admin])
 
     toast({
-      variant: "destructive",
-      title: "Admin Added",
+      title: "Admin User Added",
       description: "Admin account added successfully!",
     })
+
+    setAddingAdmin(false)
   }
 
   const handleReload = async () => {
@@ -169,7 +171,7 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
       
       onAdminsUpdate(updatedAdmins)
     } catch (error) {
-      console.error("Failed to delete admin:", error)
+      console.error("Failed to reload admins:", error)
     } finally {
       setIsLoading(false)
     }
