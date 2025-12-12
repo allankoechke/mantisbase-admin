@@ -394,25 +394,20 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Authentication Error
+              Authentication Required
             </DialogTitle>
             <DialogDescription>
-              Your session has expired or you don't have permission to access this resource. Please log in again to
-              continue.
+              Your session has expired or you don't have permission to access this resource. You will be redirected to the login page.
             </DialogDescription>
-            {
-              authErrorReason.length > 0 && (
-                <DialogDescription>
-                  {authErrorReason}
-                </DialogDescription>
-              )
-            }
+            {authErrorReason.length > 0 && (
+              <div className="mt-4 p-3 rounded-md bg-muted border border-muted-foreground/20">
+                <p className="text-xs font-medium text-muted-foreground mb-1">API Response:</p>
+                <p className="text-sm text-foreground font-mono">{authErrorReason}</p>
+              </div>
+            )}
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={handleAuthErrorLogin}>
-              Cancel
-            </Button>
-            <Button onClick={handleAuthErrorLogin}>Login Again</Button>
+            <Button onClick={handleAuthErrorLogin}>Go to Login</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
