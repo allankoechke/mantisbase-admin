@@ -1050,18 +1050,13 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
         </div>
 
         <DrawerFooter>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button
-              onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
-              disabled={isLoading}
-              className="flex-1"
-            >
-              {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Schema" : "Rules"}`}
-            </Button>
-          </div>
+          <Button
+            onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
+            disabled={isLoading}
+            className="w-full"
+          >
+            {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Schema" : "Rules"}`}
+          </Button>
         </DrawerFooter>
       </DrawerContent>
     </Drawer>
