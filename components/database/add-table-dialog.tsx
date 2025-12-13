@@ -306,43 +306,62 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
         return
       }
 
-      // For base and auth types, require at least one user field with a name
+      // For base and auth types, validate that any non-system fields have valid name and type
       if (tableType !== "view") {
-        const userFields = fields.filter((f) => !f.system && f.name.trim())
-        if (userFields.length === 0) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Please add at least one field with a name to the entity.",
-          })
-          setIsLoading(false)
-          return
+        const nonSystemFields = fields.filter((f) => !f.system)
+        for (const field of nonSystemFields) {
+          if (!field.name.trim()) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "All non-system fields must have a valid name.",
+            })
+            setIsLoading(false)
+            return
+          }
+          if (!field.type || !field.type.trim()) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: `Field "${field.name || 'unnamed'}" must have a valid type selected.`,
+            })
+            setIsLoading(false)
+            return
+          }
         }
       }
 
-      // Include all fields in order (system + user) for base/auth types
+      // Include all fields in order (system + valid user fields) for base/auth types
       // For view types, fields are typically empty or derived from SQL
+      // Filter out non-system fields that don't have valid name and type
       const allFields = tableType === "view"
         ? []
-        : fields.map(
-          (field): TableField => {
-            const fieldData: any = {
-              name: field.name,
-              type: field.type,
-              primary_key: field.primary_key,
-              required: field.required,
-              unique: field.unique || false,
-              system: field.system || false,
-              constraints: field.constraints,
-            }
-            // Only include id if it exists (for existing fields being updated)
-            if (field.id && field.id.startsWith("mbf_")) {
-              fieldData.id = field.id
-            }
+        : fields
+          .filter((field) => {
+            // Keep all system fields
+            if (field.system) return true
+            // For non-system fields, only keep those with valid name and type
+            return field.name.trim() && field.type && field.type.trim()
+          })
+          .map(
+            (field): TableField => {
+              const fieldData: any = {
+                name: field.name,
+                type: field.type,
+                primary_key: field.primary_key,
+                required: field.required,
+                unique: field.unique || false,
+                system: field.system || false,
+                constraints: field.constraints,
+              }
+              // Only include id if it exists (for existing fields being updated)
+              if (field.id && field.id.startsWith("mbf_")) {
+                fieldData.id = field.id
+              }
 
-            return fieldData
-          },
-        )
+              return fieldData
+            },
+          )
 
       const tableData: any = {
         name: tableName,
@@ -706,9 +725,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, children }: AddTable
             disabled={
               isLoading ||
               !tableName.trim() ||
-              (tableType === "view"
-                ? !sqlQuery.trim()
-                : fields.filter((f) => !f.system).length === 0)
+              (tableType === "view" ? !sqlQuery.trim() : false)
             }
           >
             {isLoading ? "Creating..." : "Create Entity"}
