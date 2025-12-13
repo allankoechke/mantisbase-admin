@@ -1,9 +1,8 @@
-// Catch-all route for all paths
-// This handles paths like /setup, /entities/students, etc.
-// The root / is handled by app/page.tsx, but this catches everything else
+// Optional catch-all route for all paths including root
+// This handles paths like /, /setup, /entities/students, etc.
 // Note: This must be a server component to use generateStaticParams()
-// The Page component it renders is already a client component
-import Page from "../page"
+// The MainPage component it renders is already a client component
+import MainPage from "@/components/main-page"
 
 // For static export, Next.js requires all routes to be pre-generated
 // Since entity names are dynamic, we can't generate them all at build time
@@ -12,9 +11,11 @@ import Page from "../page"
 // but the client-side router will handle them correctly at runtime
 export function generateStaticParams() {
   // Return base routes that are always accessible
+  // Include empty array for root path (/)
   // For dynamic entity routes like /entities/test, we can't pre-generate them
   // The client-side router will parse the actual entity name from window.location.pathname
   return [
+    { slug: [] }, // Root path
     { slug: ['setup'] },
     { slug: ['login'] },
     { slug: ['entities'] },
@@ -27,10 +28,17 @@ export function generateStaticParams() {
 // Note: With static export, Next.js will complain about routes not in generateStaticParams
 // However, since we're using client-side routing, this is expected and acceptable
 // The Page component will handle all routing based on window.location.pathname
-export default function CatchAllPage() {
+export default function CatchAllPage({
+  params,
+}: {
+  params: { slug?: string[] }
+  // Explicitly don't use searchParams to avoid serialization issues with static export
+}) {
   // Always render the main page - client-side router handles the actual routing
-  // The Page component parses window.location.pathname and renders the appropriate view
+  // The MainPage component parses window.location.pathname and renders the appropriate view
   // This works for both pre-generated routes and dynamic routes like /entities/test
-  return <Page />
+  // Params are optional for the optional catch-all route
+  // We don't use searchParams here - the client-side router handles query params
+  return <MainPage />
 }
 
