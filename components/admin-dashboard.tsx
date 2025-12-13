@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Table, Settings, Shield, LogOut, FileText, RefreshCw, ExternalLink, AlertTriangle } from "lucide-react"
+import { Logo } from "./logo"
 import {
   Sidebar,
   SidebarContent,
@@ -278,7 +279,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
           <SidebarHeader className="border-b p-0 w-full">
             <div className="flex h-16 w-full items-center justify-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Shield className="h-6 w-6" />
+                <Logo className="h-6 w-6" size={24} />
               </div>
             </div>
           </SidebarHeader>

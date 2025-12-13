@@ -22,9 +22,10 @@ interface TableDetailViewProps {
   onBack?: () => void
   apiClient: ApiClient
   onTableUpdate: (table: TableMetadata) => void
+  onTablesUpdate?: (tables: TableMetadata[]) => void
 }
 
-export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: TableDetailViewProps) {
+export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTablesUpdate }: TableDetailViewProps) {
   const [tableData, setTableData] = React.useState<any[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState(1)
@@ -467,6 +468,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
         open={configOpen}
         onClose={() => setConfigOpen(false)}
         onTableUpdate={onTableUpdate}
+        onTablesUpdate={onTablesUpdate}
       />
 
       <TableRecordDocsDrawer table={table} open={docsOpen} onClose={() => setDocsOpen(false)} />

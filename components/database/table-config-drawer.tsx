@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Plus, Trash2, Cog, X, ChevronDown } from "lucide-react"
+import { Plus, Trash2, Cog, X, ChevronDown, ChevronUp, GripVertical, Lock, AlertTriangle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,14 +15,27 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Checkbox } from "@/components/ui/checkbox"
 import type { ApiClient, TableMetadata } from "@/lib/api"
 import { dataTypes } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "@/lib/router"
+import { cn } from "@/lib/utils"
 
 interface TableConfigDrawerProps {
   table: TableMetadata
@@ -30,6 +43,7 @@ interface TableConfigDrawerProps {
   open: boolean
   onClose: () => void
   onTableUpdate: (table: TableMetadata) => void
+  onTablesUpdate?: (tables: TableMetadata[]) => void
 }
 
 // The update structure for tables is a s follows
@@ -48,7 +62,7 @@ interface TableConfigDrawerProps {
 */
 
 // NOTE: We don't support changing of field names yet!
-export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpdate }: TableConfigDrawerProps) {
+export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpdate, onTablesUpdate }: TableConfigDrawerProps) {
   const [columns, setColumns] = React.useState<any[]>([])
   const [rules, setRules] = React.useState<{
     list: { mode: string; expr: string }
@@ -66,9 +80,15 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const [isLoading, setIsLoading] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState("schema")
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false)
-  const [systemFieldsCollapsed, setSystemFieldsCollapsed] = React.useState(true)
-  const [deletedColumns, setDeletedColumns] = React.useState<string[]>([]) // Track deleted field names 
+  const [expandedFields, setExpandedFields] = React.useState<Set<string>>(new Set())
+  const [deletedColumns, setDeletedColumns] = React.useState<string[]>([]) // Track deleted field names
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [isDeleting, setIsDeleting] = React.useState(false)
   const { toast } = useToast()
+  const { navigate } = useRouter()
+
+  // Get unique key for field (use id if exists, otherwise generate one)
+  const getFieldKey = (field: any, index: number) => field.id || `temp-${index}`
 
   React.useEffect(() => {
     if (open) {
@@ -112,7 +132,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
         },
       })
       setHasUnsavedChanges(false)
-      setSystemFieldsCollapsed(true)
+      setExpandedFields(new Set())
       setDeletedColumns([])
     }
   }, [open, table])
@@ -313,6 +333,63 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
     }
   }
 
+  const handleDeleteSchema = async () => {
+    setIsDeleting(true)
+    try {
+      const res: any = await apiClient.call(`/api/v1/schemas/${table.schema.name}`, {
+        method: "DELETE",
+      })
+
+      if (res?.error?.length > 0) throw res.error
+
+      // Fetch updated tables list
+      if (onTablesUpdate) {
+        const response: any = await apiClient.call("/api/v1/schemas")
+        if (response?.error?.length > 0) throw response.error
+
+        let updatedTables: TableMetadata[] = []
+        if (Array.isArray(response)) {
+          updatedTables = response
+        } else if (response?.data && Array.isArray(response.data)) {
+          updatedTables = response.data
+        }
+        onTablesUpdate(updatedTables)
+      }
+
+      toast({
+        title: "Entity Deleted",
+        description: `The entity '${table.schema.name}' has been deleted successfully.`,
+        duration: 3000,
+      })
+
+      // Navigate to entities list or another entity
+      navigate("/entities", undefined, undefined)
+      onClose()
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error?.message || "Failed to delete entity",
+        duration: 5000,
+      })
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+    }
+  }
+
+  const toggleFieldExpanded = (fieldKey: string) => {
+    setExpandedFields((prev) => {
+      const next = new Set(prev)
+      if (next.has(fieldKey)) {
+        next.delete(fieldKey)
+      } else {
+        next.add(fieldKey)
+      }
+      return next
+    })
+  }
+
   return (
     <Drawer open={open} onOpenChange={handleClose}>
       <DrawerContent side="right" className="w-[900px] max-w-[95vw]">
@@ -339,17 +416,9 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                 </TabsList>
 
                 <TabsContent value="schema" className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-lg font-medium">Table Structure</h4>
-                      <p className="text-sm text-muted-foreground">Modify columns and their properties</p>
-                    </div>
-                    {table.schema.type !== "view" && (
-                      <Button type="button" variant="outline" size="sm" onClick={addColumn}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Column
-                      </Button>
-                    )}
+                  <div>
+                    <Label className="text-base font-medium">Fields</Label>
+                    <p className="text-sm text-muted-foreground">Define the fields for your entity</p>
                   </div>
 
                   {table.schema.type === "view" ? (
@@ -362,432 +431,191 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                       </ScrollArea>
                     </div>
                   ) : (
-                    <>
-                      {/* System Fields - Collapsible */}
-                      {columns.filter((col) => isSystemColumn(col)).length > 0 && (
-                        <Collapsible
-                          open={!systemFieldsCollapsed}
-                          onOpenChange={(open) => setSystemFieldsCollapsed(!open)}
-                        >
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-between p-2 mb-4">
-                              <span className="text-sm font-medium">
-                                System Fields ({columns.filter((col) => isSystemColumn(col)).length})
-                              </span>
-                              <ChevronDown
-                                className={`h-4 w-4 transition-transform ${systemFieldsCollapsed ? "" : "rotate-180"}`}
-                              />
-                            </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="space-y-4 mb-6">
-                            {columns.map((column, index) => {
-                              const isSystem = isSystemColumn(column)
-                              if (!isSystem) return null
-                              return (
-                                <div key={index} className="border rounded-lg bg-muted/50">
-                                  <div className="p-4 space-y-4">
-                                    {/* Basic Info */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                      <div className="md:col-span-2">
-                                        <Label className="text-sm font-medium mb-2 block">Column Name</Label>
-                                        <div className="flex items-center gap-2">
-                                          <Input
-                                            placeholder="Column name"
-                                            value={column.name}
-                                            onChange={(e) => updateColumn(index, "name", e.target.value)}
-                                            disabled={isSystem}
-                                            className={`flex-1 ${isSystem ? "bg-muted" : ""}`}
-                                          />
-                                          {isSystem && (
-                                            <Badge variant="outline" className="text-xs">
-                                              System
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <Label className="text-sm font-medium mb-2 block">Data Type</Label>
-                                        <Select
-                                          value={column.type}
-                                          onValueChange={(value) => updateColumn(index, "type", value)}
-                                          disabled={isSystem}
-                                        >
-                                          <SelectTrigger className={isSystem ? "bg-muted" : ""}>
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {dataTypes.map((type) => (
-                                              <SelectItem key={type} value={type}>
-                                                {type.toUpperCase()}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    </div>
-
-                                    {/* Basic Properties */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                      <div className="flex items-center space-x-2">
-                                        <input
-                                          type="checkbox"
-                                          id={`primary-${index}`}
-                                          checked={column.primaryKey}
-                                          onChange={(e) => updateColumn(index, "primaryKey", e.target.checked)}
-                                          disabled={isSystem}
-                                          className="rounded"
-                                        />
-                                        <Label htmlFor={`primary-${index}`} className="text-sm">
-                                          Primary Key
-                                        </Label>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <input
-                                          type="checkbox"
-                                          id={`required-${index}`}
-                                          checked={column.required}
-                                          onChange={(e) => updateColumn(index, "required", e.target.checked)}
-                                          disabled={isSystem}
-                                          className="rounded"
-                                        />
-                                        <Label htmlFor={`required-${index}`} className="text-sm">
-                                          Required
-                                        </Label>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <input
-                                          type="checkbox"
-                                          id={`unique-${index}`}
-                                          checked={column.unique || false}
-                                          onChange={(e) => updateColumn(index, "unique", e.target.checked)}
-                                          disabled={isSystem}
-                                          className="rounded"
-                                        />
-                                        <Label htmlFor={`unique-${index}`} className="text-sm">
-                                          Unique
-                                        </Label>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <input
-                                          type="checkbox"
-                                          id={`files-${index}`}
-                                          checked={column.isFile || false}
-                                          onChange={(e) => updateColumn(index, "isFile", e.target.checked)}
-                                          disabled={isSystem}
-                                          className="rounded"
-                                        />
-                                        <Label htmlFor={`files-${index}`} className="text-sm">
-                                          File Field
-                                        </Label>
-                                      </div>
-                                    </div>
-
-                                    {/* Advanced Options - Collapsible */}
-                                    <Collapsible>
-                                      <CollapsibleTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="w-full justify-between p-2">
-                                          <span className="text-sm">Advanced Options</span>
-                                          <ChevronDown className="h-4 w-4" />
-                                        </Button>
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent className="space-y-4 pt-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                          <div>
-                                            <Label className="text-sm font-medium mb-2 block">Default Value</Label>
-                                            <Input
-                                              placeholder="Default value"
-                                              value={column.defaultValue || ""}
-                                              onChange={(e) => updateColumn(index, "defaultValue", e.target.value)}
-                                              disabled={isSystem}
-                                              className={isSystem ? "bg-muted" : ""}
-                                            />
-                                          </div>
-                                          <div>
-                                            <Label className="text-sm font-medium mb-2 block">Max Length</Label>
-                                            <Input
-                                              type="number"
-                                              placeholder="Max length"
-                                              value={column.maxValue || ""}
-                                              onChange={(e) => updateColumn(index, "maxValue", e.target.value)}
-                                              disabled={isSystem}
-                                              className={isSystem ? "bg-muted" : ""}
-                                            />
-                                          </div>
-                                          <div>
-                                            <Label className="text-sm font-medium mb-2 block">Min Length</Label>
-                                            <Input
-                                              type="number"
-                                              placeholder="Min length"
-                                              value={column.minValue || ""}
-                                              onChange={(e) => updateColumn(index, "minValue", e.target.value)}
-                                              disabled={isSystem}
-                                              className={isSystem ? "bg-muted" : ""}
-                                            />
-                                          </div>
-                                          <div>
-                                            <Label className="text-sm font-medium mb-2 block">
-                                              Auto Generate Pattern
-                                            </Label>
-                                            <Input
-                                              placeholder="Auto Generate Pattern"
-                                              value={column.autoGeneratePattern || ""}
-                                              onChange={(e) =>
-                                                updateColumn(index, "autoGeneratePattern", e.target.value)
-                                              }
-                                              disabled={isSystem}
-                                              className={isSystem ? "bg-muted" : ""}
-                                            />
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <Label className="text-sm font-medium mb-2 block">Validator</Label>
-                                          <Textarea
-                                            placeholder="Column validator"
-                                            value={column.validator || ""}
-                                            onChange={(e) => updateColumn(index, "validator", e.target.value)}
-                                            disabled={isSystem}
-                                            className={isSystem ? "bg-muted" : ""}
-                                            rows={2}
-                                          />
-                                        </div>
-                                        <div>
-                                          <Label className="text-sm font-medium mb-2 block">Description</Label>
-                                          <Textarea
-                                            placeholder="Column description"
-                                            value={column.description || ""}
-                                            onChange={(e) => updateColumn(index, "description", e.target.value)}
-                                            disabled={isSystem}
-                                            className={isSystem ? "bg-muted" : ""}
-                                            rows={2}
-                                          />
-                                        </div>
-                                      </CollapsibleContent>
-                                    </Collapsible>
-
-                                    {/* Delete Button */}
-                                    <div className="flex justify-end pt-2 border-t">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => removeColumn(index)}
-                                        disabled={columns.length === 1 || isSystem}
-                                        className={`text-destructive hover:text-destructive ${isSystem ? "opacity-30" : ""}`}
-                                      >
-                                        <Trash2 className="h-4 w-4 mr-2" />
-                                        Remove Column
-                                      </Button>
-                                    </div>
-                                  </div>
+                    <div className="space-y-3">
+                      {columns.map((column, index) => {
+                        const fieldKey = getFieldKey(column, index)
+                        const isSystem = isSystemColumn(column)
+                        return (
+                          <div
+                            key={fieldKey}
+                            className={cn(
+                              "border rounded-lg p-4 space-y-3 transition-colors",
+                              isSystem && "bg-muted/30 border-muted"
+                            )}
+                          >
+                            {/* Field Header - Name and Type */}
+                            <div className="flex items-center gap-3">
+                              <GripVertical className="h-4 w-4 text-muted-foreground cursor-move flex-shrink-0" />
+                              {isSystem && (
+                                <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              )}
+                              <div className="flex-1 grid grid-cols-2 gap-3">
+                                <div>
+                                  <Input
+                                    placeholder="Field name"
+                                    value={column.name}
+                                    onChange={(e) => updateColumn(index, "name", e.target.value)}
+                                    disabled={isSystem}
+                                    className={isSystem ? "bg-muted" : ""}
+                                  />
                                 </div>
-                              )
-                            })}
-                          </CollapsibleContent>
-                        </Collapsible>
-                      )}
-
-                      {/* Regular Fields */}
-                      <div className="space-y-4">
-                        {columns.map((column, index) => {
-                          const isSystem = isSystemColumn(column)
-                          if (isSystem) return null // Skip system fields as they're in collapsible section
-                          return (
-                            <div key={index} className="border rounded-lg">
-                              <div className="p-4 space-y-4">
-                                {/* Basic Info */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                  <div className="md:col-span-2">
-                                    <Label className="text-sm font-medium mb-2 block">Column Name</Label>
-                                    <div className="flex items-center gap-2">
-                                      <Input
-                                        placeholder="Column name"
-                                        value={column.name}
-                                        onChange={(e) => updateColumn(index, "name", e.target.value)}
-                                        disabled={isSystem}
-                                        className={`flex-1 ${isSystem ? "bg-muted" : ""}`}
-                                      />
-                                      {isSystem && (
-                                        <Badge variant="outline" className="text-xs">
-                                          System
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <Label className="text-sm font-medium mb-2 block">Data Type</Label>
-                                    <Select
-                                      value={column.type}
-                                      onValueChange={(value) => updateColumn(index, "type", value)}
-                                      disabled={isSystem}
-                                    >
-                                      <SelectTrigger className={isSystem ? "bg-muted" : ""}>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {dataTypes.map((type) => (
-                                          <SelectItem key={type} value={type}>
-                                            {type.toUpperCase()}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-
-                                {/* Basic Properties */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`primary-${index}`}
-                                      checked={column.primaryKey}
-                                      onChange={(e) => updateColumn(index, "primaryKey", e.target.checked)}
-                                      disabled={isSystem}
-                                      className="rounded"
-                                    />
-                                    <Label htmlFor={`primary-${index}`} className="text-sm">
-                                      Primary Key
-                                    </Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`required-${index}`}
-                                      checked={column.required}
-                                      onChange={(e) => updateColumn(index, "required", e.target.checked)}
-                                      disabled={isSystem}
-                                      className="rounded"
-                                    />
-                                    <Label htmlFor={`required-${index}`} className="text-sm">
-                                      Required
-                                    </Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`unique-${index}`}
-                                      checked={column.unique || false}
-                                      onChange={(e) => updateColumn(index, "unique", e.target.checked)}
-                                      disabled={isSystem}
-                                      className="rounded"
-                                    />
-                                    <Label htmlFor={`unique-${index}`} className="text-sm">
-                                      Unique
-                                    </Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`files-${index}`}
-                                      checked={column.isFile || false}
-                                      onChange={(e) => updateColumn(index, "isFile", e.target.checked)}
-                                      disabled={isSystem}
-                                      className="rounded"
-                                    />
-                                    <Label htmlFor={`files-${index}`} className="text-sm">
-                                      File Field
-                                    </Label>
-                                  </div>
-                                </div>
-
-                                {/* Advanced Options - Collapsible */}
-                                <Collapsible>
-                                  <CollapsibleTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="w-full justify-between p-2">
-                                      <span className="text-sm">Advanced Options</span>
-                                      <ChevronDown className="h-4 w-4" />
-                                    </Button>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent className="space-y-4 pt-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      <div>
-                                        <Label className="text-sm font-medium mb-2 block">Default Value</Label>
-                                        <Input
-                                          placeholder="Default value"
-                                          value={column.defaultValue || ""}
-                                          onChange={(e) => updateColumn(index, "defaultValue", e.target.value)}
-                                          disabled={isSystem}
-                                          className={isSystem ? "bg-muted" : ""}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-sm font-medium mb-2 block">Max Length</Label>
-                                        <Input
-                                          type="number"
-                                          placeholder="Max length"
-                                          value={column.maxValue || ""}
-                                          onChange={(e) => updateColumn(index, "maxValue", e.target.value)}
-                                          disabled={isSystem}
-                                          className={isSystem ? "bg-muted" : ""}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-sm font-medium mb-2 block">Min Length</Label>
-                                        <Input
-                                          type="number"
-                                          placeholder="Min length"
-                                          value={column.minValue || ""}
-                                          onChange={(e) => updateColumn(index, "minValue", e.target.value)}
-                                          disabled={isSystem}
-                                          className={isSystem ? "bg-muted" : ""}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-sm font-medium mb-2 block">Auto Generate Pattern</Label>
-                                        <Input
-                                          placeholder="Auto Generate Pattern"
-                                          value={column.autoGeneratePattern || ""}
-                                          onChange={(e) => updateColumn(index, "autoGeneratePattern", e.target.value)}
-                                          disabled={isSystem}
-                                          className={isSystem ? "bg-muted" : ""}
-                                        />
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <Label className="text-sm font-medium mb-2 block">Validator</Label>
-                                      <Textarea
-                                        placeholder="Column validator"
-                                        value={column.validator || ""}
-                                        onChange={(e) => updateColumn(index, "validator", e.target.value)}
-                                        disabled={isSystem}
-                                        className={isSystem ? "bg-muted" : ""}
-                                        rows={2}
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label className="text-sm font-medium mb-2 block">Description</Label>
-                                      <Textarea
-                                        placeholder="Column description"
-                                        value={column.description || ""}
-                                        onChange={(e) => updateColumn(index, "description", e.target.value)}
-                                        disabled={isSystem}
-                                        className={isSystem ? "bg-muted" : ""}
-                                        rows={2}
-                                      />
-                                    </div>
-                                  </CollapsibleContent>
-                                </Collapsible>
-
-                                {/* Delete Button */}
-                                <div className="flex justify-end pt-2 border-t">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeColumn(index)}
-                                    disabled={columns.length === 1 || isSystem}
-                                    className={`text-destructive hover:text-destructive ${isSystem ? "opacity-30" : ""}`}
+                                <div>
+                                  <Select
+                                    value={column.type}
+                                    onValueChange={(value) => updateColumn(index, "type", value)}
+                                    disabled={isSystem}
                                   >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Remove Column
-                                  </Button>
+                                    <SelectTrigger className={isSystem ? "bg-muted" : ""}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {dataTypes.map((type) => (
+                                        <SelectItem key={type} value={type}>
+                                          {type.toUpperCase()}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                               </div>
+                              {!isSystem && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeColumn(index)}
+                                  className="flex-shrink-0"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isSystem && (
+                                <Badge variant="outline" className="text-xs flex-shrink-0">
+                                  System
+                                </Badge>
+                              )}
                             </div>
-                          )
-                        })}
-                      </div>
-                    </>
+
+                            {/* Collapsible Advanced Options */}
+                            {!isSystem && (
+                              <Collapsible open={expandedFields.has(fieldKey)} onOpenChange={() => toggleFieldExpanded(fieldKey)}>
+                                <CollapsibleTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="w-full justify-between">
+                                    <span className="text-xs text-muted-foreground">Advanced Options</span>
+                                    {expandedFields.has(fieldKey) ? (
+                                      <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="space-y-3 pt-2">
+                                  <div className="grid grid-cols-3 gap-3">
+                                    <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`pk-${fieldKey}`}
+                                        checked={column.primaryKey}
+                                        onCheckedChange={(checked) => updateColumn(index, "primaryKey", checked as boolean)}
+                                      />
+                                      <Label htmlFor={`pk-${fieldKey}`} className="text-xs cursor-pointer">
+                                        Primary Key
+                                      </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`unique-${fieldKey}`}
+                                        checked={column.unique || false}
+                                        onCheckedChange={(checked) => updateColumn(index, "unique", checked as boolean)}
+                                      />
+                                      <Label htmlFor={`unique-${fieldKey}`} className="text-xs cursor-pointer">
+                                        Unique
+                                      </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`required-${fieldKey}`}
+                                        checked={column.required || false}
+                                        onCheckedChange={(checked) => updateColumn(index, "required", checked as boolean)}
+                                      />
+                                      <Label htmlFor={`required-${fieldKey}`} className="text-xs cursor-pointer">
+                                        Required
+                                      </Label>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label htmlFor={`min-${fieldKey}`} className="text-xs">
+                                        Min Value
+                                      </Label>
+                                      <Input
+                                        id={`min-${fieldKey}`}
+                                        type="number"
+                                        placeholder="Min"
+                                        value={column.minValue || ""}
+                                        onChange={(e) =>
+                                          updateColumn(index, "minValue", e.target.value ? Number.parseFloat(e.target.value) : null)
+                                        }
+                                        className="h-8 text-xs"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label htmlFor={`max-${fieldKey}`} className="text-xs">
+                                        Max Value
+                                      </Label>
+                                      <Input
+                                        id={`max-${fieldKey}`}
+                                        type="number"
+                                        placeholder="Max"
+                                        value={column.maxValue || ""}
+                                        onChange={(e) =>
+                                          updateColumn(index, "maxValue", e.target.value ? Number.parseFloat(e.target.value) : null)
+                                        }
+                                        className="h-8 text-xs"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label htmlFor={`default-${fieldKey}`} className="text-xs">
+                                      Default Value
+                                    </Label>
+                                    <Input
+                                      id={`default-${fieldKey}`}
+                                      placeholder="Default value"
+                                      value={column.defaultValue || ""}
+                                      onChange={(e) => updateColumn(index, "defaultValue", e.target.value || null)}
+                                      className="h-8 text-xs"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label htmlFor={`validator-${fieldKey}`} className="text-xs">
+                                      Validator
+                                    </Label>
+                                    <Input
+                                      id={`validator-${fieldKey}`}
+                                      placeholder="Validator pattern"
+                                      value={column.validator || ""}
+                                      onChange={(e) => updateColumn(index, "validator", e.target.value || null)}
+                                      className="h-8 text-xs"
+                                    />
+                                  </div>
+                                </CollapsibleContent>
+                              </Collapsible>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {/* Add Field Button */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full border-dashed"
+                        onClick={addColumn}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Field
+                      </Button>
+                    </div>
                   )}
 
                   {table.schema.type !== "view" && (
@@ -1049,15 +877,52 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           </ScrollArea>
         </div>
 
-        <DrawerFooter>
+        <DrawerFooter className="flex-col gap-3 sm:flex-row">
+          {activeTab === "schema" && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={isDeleting}
+              className="w-full sm:w-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Entity
+            </Button>
+          )}
           <Button
             onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
             disabled={isLoading}
-            className="w-full"
+            className="w-full sm:flex-1"
           >
             {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Schema" : "Rules"}`}
           </Button>
         </DrawerFooter>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Delete Entity
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the entity <strong>"{table.schema.name}"</strong>? This action cannot be undone and will permanently delete all data associated with this entity.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteSchema}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DrawerContent>
     </Drawer>
   )

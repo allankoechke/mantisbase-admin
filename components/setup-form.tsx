@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Eye, EyeOff, Shield, CheckCircle2 } from "lucide-react"
+import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
+import { Logo } from "./logo"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -90,7 +91,7 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <Shield className="h-12 w-12 text-primary" />
+            <Logo className="h-12 w-12 text-primary" size={48} />
           </div>
           <CardTitle className="text-2xl">Setup Admin Account</CardTitle>
           <CardDescription>Create your first admin account to get started</CardDescription>
