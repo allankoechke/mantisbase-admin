@@ -56,9 +56,35 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     }
   }, [route.queryParams.filter])
 
+  // Clear data and reset state when switching entities
+  React.useEffect(() => {
+    // Clear table data immediately when entity changes
+    setTableData([])
+    setCurrentPage(1)
+    setTotalPages(1)
+    setSelectedItems([])
+    setFilterTerm("")
+    setAppliedFilter("")
+    setIsLoading(true)
+    
+    // Update visible columns based on new table schema
+    setVisibleColumns(table.schema.fields?.map((field) => field.name) || [])
+    setIsViewType(table.schema.type === "view")
+    
+    // Clear filter from URL when switching entities (if filter exists in query params)
+    if (route.queryParams.filter) {
+      navigate("/entities/:name", { name: table.schema.name }, {})
+    }
+    
+    // Load new data after clearing - this will use the reset values (page 1, empty filter)
+    // Note: We don't need to call loadTableData here because the next useEffect will handle it
+    // when currentPage and appliedFilter are updated
+  }, [table.schema.name]) // Watch for entity name changes
+
+  // Load data when page, filter, or entity changes
   React.useEffect(() => {
     loadTableData()
-  }, [currentPage, appliedFilter])
+  }, [currentPage, appliedFilter, table.schema.name])
 
   React.useEffect(() => {
     setIsViewType(table.schema.type === "view")
@@ -119,7 +145,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate }: Tab
     setCurrentPage(1) // Reset to first page when filtering
     
     // Update URL with filter query param
-    const queryParams = filterTerm ? { filter: filterTerm } : {}
+    const queryParams: Record<string, string> = filterTerm ? { filter: filterTerm } : {}
     navigate("/entities/:name", { name: table.schema.name }, queryParams)
   }
 
