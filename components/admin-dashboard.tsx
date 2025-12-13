@@ -130,11 +130,16 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     try {
       setLoading(true)
 
-      const [tablesData, adminsData, settingsData] = await Promise.all([
+      const [tablesData, adminsData] = await Promise.all([
         apiClient.call<any>("/api/v1/schemas"),
         apiClient.call<any>("/api/v1/entities/mb_admins"),
-        apiClient.call<AppSettings>("/api/v1/settings/config"),
       ])
+
+      // const [tablesData, adminsData, settingsData] = await Promise.all([
+      //   apiClient.call<any>("/api/v1/schemas"),
+      //   apiClient.call<any>("/api/v1/entities/mb_admins"),
+      //   apiClient.call<AppSettings>("/api/v1/settings/config"),
+      // ])
 
       // Ensure tablesData is an array - handle different response structures
       let tablesArray: TableMetadata[] = []
@@ -143,7 +148,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       } else if (tablesData?.data && Array.isArray(tablesData.data)) {
         tablesArray = tablesData.data
       }
-      console.log("Tables data received:", tablesData, "Is array:", Array.isArray(tablesData), "Array length:", tablesArray.length)
+
       setTables(tablesArray)
       
       // Ensure adminsData is an array - handle paginated response
@@ -159,7 +164,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
         adminsArray = adminsData.data.items
       }
       setAdmins(adminsArray)
-      setSettings(settingsData)
+      // setSettings(settingsData)
     } catch (error) {
       console.error("Failed to load data:", error)
     } finally {
