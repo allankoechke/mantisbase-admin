@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AppStateProvider } from "@/lib/app-state"
 import { useRouter } from "@/lib/router"
 
-export default function Page() {
+export default function MainPage() {
   const [token, setToken] = React.useState<string | null>(null)
   const [mounted, setMounted] = React.useState(false)
   const { route, navigate } = useRouter()
@@ -106,3 +106,4 @@ export default function Page() {
     </ThemeProvider>
   )
 }
+

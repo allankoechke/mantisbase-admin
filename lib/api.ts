@@ -48,11 +48,8 @@ export interface TableSchema {
 
 export interface TableMetadata {
   created: string
-  has_api: boolean
   id: string
-  name: string
   schema: TableSchema
-  type: "base" | "auth" | "view"
   updated: string
 }
 

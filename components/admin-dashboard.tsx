@@ -112,6 +112,40 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     setApiClient(newApiClient)
   }, [token, handleUnauthorized, showError])
 
+  const loadAdmins = React.useCallback(async () => {
+    if (!apiClient) return
+    
+    try {
+      const adminsData = await apiClient.call<any>("/api/v1/entities/mb_admins")
+      
+      // Ensure adminsData is an array - handle paginated response
+      let adminsArray: Admin[] = []
+      if (Array.isArray(adminsData)) {
+        // Fallback: if response is directly an array (shouldn't happen with new API)
+        adminsArray = adminsData
+      } else if (adminsData?.items && Array.isArray(adminsData.items)) {
+        // Paginated response: extract items from data object
+        adminsArray = adminsData.items
+      } else if (adminsData?.data?.items && Array.isArray(adminsData.data.items)) {
+        // If data is nested
+        adminsArray = adminsData.data.items
+      }
+      setAdmins(adminsArray)
+    } catch (error) {
+      console.error("Failed to load admins:", error)
+    }
+  }, [apiClient])
+
+  // Load admins when navigating to the admins page
+  React.useEffect(() => {
+    // Check if we're on the admins page
+    const pathParts = route.path.split("/").filter(Boolean)
+    const section = pathParts[0] || "entities"
+    if (section === "admins") {
+      loadAdmins()
+    }
+  }, [route.path, loadAdmins])
+
   const loadData = async () => {
     // Set default settings if loading fails
     setSettings({
@@ -130,11 +164,8 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     try {
       setLoading(true)
 
-      const [tablesData, adminsData, settingsData] = await Promise.all([
-        apiClient.call<any>("/api/v1/schemas"),
-        apiClient.call<any>("/api/v1/entities/mb_admins"),
-        apiClient.call<AppSettings>("/api/v1/settings/config"),
-      ])
+      // Only load tables on initial load
+      const tablesData = await apiClient.call<any>("/api/v1/schemas")
 
       // Ensure tablesData is an array - handle different response structures
       let tablesArray: TableMetadata[] = []
@@ -143,29 +174,15 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       } else if (tablesData?.data && Array.isArray(tablesData.data)) {
         tablesArray = tablesData.data
       }
-      console.log("Tables data received:", tablesData, "Is array:", Array.isArray(tablesData), "Array length:", tablesArray.length)
+
       setTables(tablesArray)
-      
-      // Ensure adminsData is an array - handle paginated response
-      let adminsArray: Admin[] = []
-      if (Array.isArray(adminsData)) {
-        // Fallback: if response is directly an array (shouldn't happen with new API)
-        adminsArray = adminsData
-      } else if (adminsData?.items && Array.isArray(adminsData.items)) {
-        // Paginated response: extract items from data object
-        adminsArray = adminsData.items
-      } else if (adminsData?.data?.items && Array.isArray(adminsData.data.items)) {
-        // If data is nested
-        adminsArray = adminsData.data.items
-      }
-      setAdmins(adminsArray)
-      setSettings(settingsData)
     } catch (error) {
       console.error("Failed to load data:", error)
     } finally {
       setLoading(false)
     }
   }
+
 
   const handleLogout = () => {
     try {
@@ -394,25 +411,20 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Authentication Error
+              Authentication Required
             </DialogTitle>
             <DialogDescription>
-              Your session has expired or you don't have permission to access this resource. Please log in again to
-              continue.
+              Your session has expired or you don't have permission to access this resource. You will be redirected to the login page.
             </DialogDescription>
-            {
-              authErrorReason.length > 0 && (
-                <DialogDescription>
-                  {authErrorReason}
-                </DialogDescription>
-              )
-            }
+            {authErrorReason.length > 0 && (
+              <div className="mt-4 p-3 rounded-md bg-muted border border-muted-foreground/20">
+                <p className="text-xs font-medium text-muted-foreground mb-1">API Response:</p>
+                <p className="text-sm text-foreground font-mono">{authErrorReason}</p>
+              </div>
+            )}
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={handleAuthErrorLogin}>
-              Cancel
-            </Button>
-            <Button onClick={handleAuthErrorLogin}>Login Again</Button>
+            <Button onClick={handleAuthErrorLogin}>Go to Login</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -18,7 +18,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: 'export',
+  // Only use static export in production builds, not in development
+  // This allows dynamic routes to work in development
+  ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
   trailingSlash: true,
 }
 
