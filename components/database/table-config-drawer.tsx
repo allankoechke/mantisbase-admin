@@ -49,13 +49,25 @@ interface TableConfigDrawerProps {
 
 // NOTE: We don't support changing of field names yet!
 export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpdate }: TableConfigDrawerProps) {
-  const [columns, setColumns] = React.useState([])
-  const [rules, setRules] = React.useState({})
+  const [columns, setColumns] = React.useState<any[]>([])
+  const [rules, setRules] = React.useState<{
+    list: { mode: string; expr: string }
+    get: { mode: string; expr: string }
+    add: { mode: string; expr: string }
+    update: { mode: string; expr: string }
+    delete: { mode: string; expr: string }
+  }>({
+    list: { mode: "admin", expr: "" },
+    get: { mode: "admin", expr: "" },
+    add: { mode: "admin", expr: "" },
+    update: { mode: "admin", expr: "" },
+    delete: { mode: "admin", expr: "" },
+  })
   const [isLoading, setIsLoading] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState("schema")
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false)
   const [systemFieldsCollapsed, setSystemFieldsCollapsed] = React.useState(true)
-  const [deletedColumns, setDeletedColumns] = React.useState([]) // Track deleted field names, we'll 
+  const [deletedColumns, setDeletedColumns] = React.useState<string[]>([]) // Track deleted field names 
   const { toast } = useToast()
 
   React.useEffect(() => {
@@ -72,7 +84,33 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
         validator: col.constraints?.validator || null,
       })) || []
       setColumns(transformedColumns)
-      setRules({ addRule: table.schema.rules.add, listRule: table.schema.rules.list, getRule: table.schema.rules.get, updateRule: table.schema.rules.update, deletRule: table.schema.rules.delete })
+      // Initialize rules with mode and expr from API
+      // Convert empty string to "admin" for UI (Select doesn't allow empty string values)
+      const normalizeMode = (mode: string | undefined) => {
+        return mode === "" || !mode ? "admin" : mode
+      }
+      setRules({
+        list: {
+          mode: normalizeMode(table.schema.rules?.list?.mode),
+          expr: table.schema.rules?.list?.expr || "",
+        },
+        get: {
+          mode: normalizeMode(table.schema.rules?.get?.mode),
+          expr: table.schema.rules?.get?.expr || "",
+        },
+        add: {
+          mode: normalizeMode(table.schema.rules?.add?.mode),
+          expr: table.schema.rules?.add?.expr || "",
+        },
+        update: {
+          mode: normalizeMode(table.schema.rules?.update?.mode),
+          expr: table.schema.rules?.update?.expr || "",
+        },
+        delete: {
+          mode: normalizeMode(table.schema.rules?.delete?.mode),
+          expr: table.schema.rules?.delete?.expr || "",
+        },
+      })
       setHasUnsavedChanges(false)
       setSystemFieldsCollapsed(true)
       setDeletedColumns([])
@@ -171,13 +209,13 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       const body = { fields: transformedFields, deletedFields: deletedColumns };
       console.log(body)
       // return
-      const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/tables/${table.id}`, {
+      const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       })
 
       // If the request failed, throw the error here 
-      if (updatedTable?.error?.length > 0) throw updatedTable.error
+      if ((updatedTable as any)?.error?.length > 0) throw (updatedTable as any).error
 
       onTableUpdate(updatedTable)
       toast({
@@ -196,36 +234,36 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const handleSaveRules = async () => {
     setIsLoading(true)
     try {
-      const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/tables/${table.id}`, {
+      const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`, {
         method: "PATCH",
         body: JSON.stringify({
           rules: {
             list: {
-              expr: rules.listRule || "",
-              mode: "auth"
+              mode: rules.list.mode === "admin" ? "" : (rules.list.mode || ""),
+              expr: rules.list.expr || "",
             },
             get: {
-              expr: rules.getRule || "",
-              mode: "auth"
+              mode: rules.get.mode === "admin" ? "" : (rules.get.mode || ""),
+              expr: rules.get.expr || "",
             },
             add: {
-              expr: rules.addRule || "",
-              mode: "auth"
+              mode: rules.add.mode === "admin" ? "" : (rules.add.mode || ""),
+              expr: rules.add.expr || "",
             },
             update: {
-              expr: rules.updateRule || "",
-              mode: "auth"
+              mode: rules.update.mode === "admin" ? "" : (rules.update.mode || ""),
+              expr: rules.update.expr || "",
             },
             delete: {
-              expr: rules.deleteRule || "",
-              mode: "auth"
+              mode: rules.delete.mode === "admin" ? "" : (rules.delete.mode || ""),
+              expr: rules.delete.expr || "",
             },
           },
         }),
       })
 
       // If the request failed, throw the error here 
-      if (updatedTable?.error?.length > 0) throw updatedTable.error
+      if ((updatedTable as any)?.error?.length > 0) throw (updatedTable as any).error
 
       onTableUpdate(updatedTable)
       toast({
@@ -233,11 +271,30 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
         description: "Table access rules updated successfully!",
         duration: 3000,
       })
+      setHasUnsavedChanges(false)
     } catch (error) {
       console.error("Failed to update rules:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update access rules",
+        variant: "destructive",
+        duration: 5000,
+      })
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Helper to update a specific rule
+  const updateRule = (ruleKey: keyof typeof rules, field: "mode" | "expr", value: string) => {
+    setRules({
+      ...rules,
+      [ruleKey]: {
+        ...rules[ruleKey],
+        [field]: value,
+      },
+    })
+    setHasUnsavedChanges(true)
   }
 
   const isSystemColumn = (column: any) => {
@@ -754,106 +811,234 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
 
                 <TabsContent value="rules" className="space-y-6">
                   <div>
-                    <h4 className="text-lg font-medium mb-4">Access Control Rules</h4>
+                    <h4 className="text-lg font-medium mb-2">Access Control Rules</h4>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Configure who can access and modify records in this entity
+                    </p>
                     <div className="space-y-6">
-                      <div>
-                        <Label htmlFor="list-rule" className="text-sm font-medium">
-                          List Rule
-                        </Label>
-                        <Textarea
-                          id="list-rule"
-                          placeholder='e.g., "True", "auth.id != None", ""'
-                          value={rules?.listRule}
-                          onChange={(e) => setRules({ ...rules, listRule: e.target.value })}
-                          className="mt-2"
-                          rows={3}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">Controls who can list records</p>
+                      {/* List Rule */}
+                      <div className="border rounded-lg p-4 space-y-3">
+                        <div>
+                          <Label htmlFor="list-mode" className="text-sm font-medium">
+                            List Records
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Controls who can list all records</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Select
+                            value={rules.list.mode}
+                            onValueChange={(value) => updateRule("list", "mode", value)}
+                          >
+                            <SelectTrigger id="list-mode" className="w-full">
+                              <SelectValue placeholder="Select access mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin Only (Default)</SelectItem>
+                              <SelectItem value="public">Public</SelectItem>
+                              <SelectItem value="auth">Authenticated Users</SelectItem>
+                              <SelectItem value="custom">Custom Expression</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {rules.list.mode === "custom" && (
+                            <div>
+                              <Textarea
+                                placeholder='e.g., "auth.role == \"admin\"" or "auth.id == record.owner_id"'
+                                value={rules.list.expr}
+                                onChange={(e) => updateRule("list", "expr", e.target.value)}
+                                className="mt-2 font-mono text-sm"
+                                rows={3}
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Enter a custom expression to evaluate access
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <div>
-                        <Label htmlFor="get-rule" className="text-sm font-medium">
-                          Get Rule
-                        </Label>
-                        <Textarea
-                          id="get-rule"
-                          placeholder='e.g., "True", "auth.id == record.user_id"'
-                          value={rules?.getRule}
-                          onChange={(e) => setRules({ ...rules, getRule: e.target.value })}
-                          className="mt-2"
-                          rows={3}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">Controls who can view individual records</p>
+                      {/* Get Rule */}
+                      <div className="border rounded-lg p-4 space-y-3">
+                        <div>
+                          <Label htmlFor="get-mode" className="text-sm font-medium">
+                            Get Record
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Controls who can view individual records</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Select
+                            value={rules.get.mode}
+                            onValueChange={(value) => updateRule("get", "mode", value)}
+                          >
+                            <SelectTrigger id="get-mode" className="w-full">
+                              <SelectValue placeholder="Select access mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin Only (Default)</SelectItem>
+                              <SelectItem value="public">Public</SelectItem>
+                              <SelectItem value="auth">Authenticated Users</SelectItem>
+                              <SelectItem value="custom">Custom Expression</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {rules.get.mode === "custom" && (
+                            <div>
+                              <Textarea
+                                placeholder='e.g., "auth.id == record.user_id"'
+                                value={rules.get.expr}
+                                onChange={(e) => updateRule("get", "expr", e.target.value)}
+                                className="mt-2 font-mono text-sm"
+                                rows={3}
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Enter a custom expression to evaluate access
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {table.schema.type !== "view" && (
                         <>
-                          <div>
-                            <Label htmlFor="add-rule" className="text-sm font-medium">
-                              Add Rule
-                            </Label>
-                            <Textarea
-                              id="add-rule"
-                              placeholder='e.g., "auth.id != None", "auth.role == "admin""'
-                              value={rules?.addRule}
-                              onChange={(e) => setRules({ ...rules, addRule: e.target.value })}
-                              className="mt-2"
-                              rows={3}
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">Controls who can create new records</p>
+                          {/* Add Rule */}
+                          <div className="border rounded-lg p-4 space-y-3">
+                            <div>
+                              <Label htmlFor="add-mode" className="text-sm font-medium">
+                                Add Record
+                              </Label>
+                              <p className="text-xs text-muted-foreground mt-0.5">Controls who can create new records</p>
+                            </div>
+                            <div className="space-y-2">
+                              <Select
+                                value={rules.add.mode}
+                                onValueChange={(value) => updateRule("add", "mode", value)}
+                              >
+                                <SelectTrigger id="add-mode" className="w-full">
+                                  <SelectValue placeholder="Select access mode" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin Only (Default)</SelectItem>
+                                  <SelectItem value="public">Public</SelectItem>
+                                  <SelectItem value="auth">Authenticated Users</SelectItem>
+                                  <SelectItem value="custom">Custom Expression</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {rules.add.mode === "custom" && (
+                                <div>
+                                  <Textarea
+                                    placeholder='e.g., "auth.id != None" or "auth.role == \"admin\""'
+                                    value={rules.add.expr}
+                                    onChange={(e) => updateRule("add", "expr", e.target.value)}
+                                    className="mt-2 font-mono text-sm"
+                                    rows={3}
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Enter a custom expression to evaluate access
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
-                          <div>
-                            <Label htmlFor="update-rule" className="text-sm font-medium">
-                              Update Rule
-                            </Label>
-                            <Textarea
-                              id="update-rule"
-                              placeholder='e.g., "auth.id == record.user_id", ""'
-                              value={rules?.updateRule}
-                              onChange={(e) => setRules({ ...rules, updateRule: e.target.value })}
-                              className="mt-2"
-                              rows={3}
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">Controls who can update records</p>
+                          {/* Update Rule */}
+                          <div className="border rounded-lg p-4 space-y-3">
+                            <div>
+                              <Label htmlFor="update-mode" className="text-sm font-medium">
+                                Update Record
+                              </Label>
+                              <p className="text-xs text-muted-foreground mt-0.5">Controls who can modify existing records</p>
+                            </div>
+                            <div className="space-y-2">
+                              <Select
+                                value={rules.update.mode}
+                                onValueChange={(value) => updateRule("update", "mode", value)}
+                              >
+                                <SelectTrigger id="update-mode" className="w-full">
+                                  <SelectValue placeholder="Select access mode" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin Only (Default)</SelectItem>
+                                  <SelectItem value="public">Public</SelectItem>
+                                  <SelectItem value="auth">Authenticated Users</SelectItem>
+                                  <SelectItem value="custom">Custom Expression</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {rules.update.mode === "custom" && (
+                                <div>
+                                  <Textarea
+                                    placeholder='e.g., "auth.id == record.user_id"'
+                                    value={rules.update.expr}
+                                    onChange={(e) => updateRule("update", "expr", e.target.value)}
+                                    className="mt-2 font-mono text-sm"
+                                    rows={3}
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Enter a custom expression to evaluate access
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
-                          <div>
-                            <Label htmlFor="delete-rule" className="text-sm font-medium">
-                              Delete Rule
-                            </Label>
-                            <Textarea
-                              id="delete-rule"
-                              placeholder='e.g., "auth.role == "admin"", ""'
-                              value={rules?.deleteRule}
-                              onChange={(e) => setRules({ ...rules, deleteRule: e.target.value })}
-                              className="mt-2"
-                              rows={3}
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">Controls who can delete records</p>
+                          {/* Delete Rule */}
+                          <div className="border rounded-lg p-4 space-y-3">
+                            <div>
+                              <Label htmlFor="delete-mode" className="text-sm font-medium">
+                                Delete Record
+                              </Label>
+                              <p className="text-xs text-muted-foreground mt-0.5">Controls who can delete records</p>
+                            </div>
+                            <div className="space-y-2">
+                              <Select
+                                value={rules.delete.mode}
+                                onValueChange={(value) => updateRule("delete", "mode", value)}
+                              >
+                                <SelectTrigger id="delete-mode" className="w-full">
+                                  <SelectValue placeholder="Select access mode" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin Only (Default)</SelectItem>
+                                  <SelectItem value="public">Public</SelectItem>
+                                  <SelectItem value="auth">Authenticated Users</SelectItem>
+                                  <SelectItem value="custom">Custom Expression</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {rules.delete.mode === "custom" && (
+                                <div>
+                                  <Textarea
+                                    placeholder='e.g., "auth.role == \"admin\"" or "auth.id == record.owner_id"'
+                                    value={rules.delete.expr}
+                                    onChange={(e) => updateRule("delete", "expr", e.target.value)}
+                                    className="mt-2 font-mono text-sm"
+                                    rows={3}
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Enter a custom expression to evaluate access
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </>
                       )}
                     </div>
 
                     <div className="mt-6 p-4 bg-muted rounded-lg">
-                      <h5 className="font-medium mb-3">Rule Examples</h5>
+                      <h5 className="font-medium mb-3 text-sm">Access Mode Guide</h5>
                       <div className="space-y-2 text-sm text-muted-foreground">
-                        <div className="grid grid-cols-1 gap-2">
-                          <p>
-                            <code className="bg-background px-2 py-1 rounded">""</code> - Admin access only
-                          </p>
-                          <p>
-                            <code className="bg-background px-2 py-1 rounded">"True"</code> - Public access
-                          </p>
-                          <p>
-                            <code className="bg-background px-2 py-1 rounded">"auth.id != None"</code> - Authenticated
-                            users only
-                          </p>
-                          <p>
-                            <code className="bg-background px-2 py-1 rounded">"auth.id == record.user_id"</code> - Owner
-                            access only
-                          </p>
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="text-xs mt-0.5">Admin Only</Badge>
+                          <p>Only administrators can access (default). Leave mode empty.</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="text-xs mt-0.5">Public</Badge>
+                          <p>Anyone can access, no authentication required.</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="text-xs mt-0.5">Authenticated</Badge>
+                          <p>Any logged-in user can access.</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="text-xs mt-0.5">Custom</Badge>
+                          <p>Evaluate a custom expression to determine access. Use <code className="bg-background px-1 py-0.5 rounded text-xs">auth</code> for current user and <code className="bg-background px-1 py-0.5 rounded text-xs">record</code> for the record being accessed.</p>
                         </div>
                       </div>
                     </div>
