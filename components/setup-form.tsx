@@ -57,7 +57,7 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
 
     try {
       // Create admin account using the setup token
-      const response: any = await apiClient.call("/api/v1/entities/mb_admins", {
+      const response: any = await apiClient.call("/api/v1/auth/setup/admin", {
         method: "POST",
         body: JSON.stringify({
           email,
@@ -65,10 +65,12 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
         }),
       })
 
-      if (response?.error?.length > 0) {
+      // Check if response has an error field (ApiClient may return error in catch block)
+      if (response?.error && response.error.length > 0) {
         throw new Error(response.error)
       }
 
+      // If we get here, the account was created successfully
       setSuccess(true)
       toast({
         title: "Account Created",
@@ -80,7 +82,10 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
         onSetupComplete()
       }, 2000)
     } catch (err: any) {
-      setError(err.message || "Failed to create admin account")
+      // Handle API errors - ApiClient throws errors for failed requests
+      const errorMessage = err.message || "Failed to create admin account"
+      setError(errorMessage)
+      console.error("Setup error:", err)
     } finally {
       setIsLoading(false)
     }
