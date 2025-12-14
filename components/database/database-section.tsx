@@ -234,6 +234,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
               const updatedTables = tables.map((t) => (t.id === updatedTable.id ? updatedTable : t))
               onTablesUpdate(updatedTables)
             }}
+            onTablesUpdate={onTablesUpdate}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

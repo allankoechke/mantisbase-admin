@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Eye, EyeOff, Shield, CheckCircle2 } from "lucide-react"
+import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
+import { Logo } from "./logo"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,7 +57,7 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
 
     try {
       // Create admin account using the setup token
-      const response: any = await apiClient.call("/api/v1/entities/mb_admins", {
+      const response: any = await apiClient.call("/api/v1/auth/setup/admin", {
         method: "POST",
         body: JSON.stringify({
           email,
@@ -64,10 +65,12 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
         }),
       })
 
-      if (response?.error?.length > 0) {
+      // Check if response has an error field (ApiClient may return error in catch block)
+      if (response?.error && response.error.length > 0) {
         throw new Error(response.error)
       }
 
+      // If we get here, the account was created successfully
       setSuccess(true)
       toast({
         title: "Account Created",
@@ -79,7 +82,10 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
         onSetupComplete()
       }, 2000)
     } catch (err: any) {
-      setError(err.message || "Failed to create admin account")
+      // Handle API errors - ApiClient throws errors for failed requests
+      const errorMessage = err.message || "Failed to create admin account"
+      setError(errorMessage)
+      console.error("Setup error:", err)
     } finally {
       setIsLoading(false)
     }
@@ -90,7 +96,7 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <Shield className="h-12 w-12 text-primary" />
+            <Logo className="h-12 w-12 text-primary" size={48} />
           </div>
           <CardTitle className="text-2xl">Setup Admin Account</CardTitle>
           <CardDescription>Create your first admin account to get started</CardDescription>
