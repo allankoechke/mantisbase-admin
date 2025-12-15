@@ -18,24 +18,24 @@ const ROUTE_CHANGE_EVENT = "custom-route-change"
 let currentRoute: ParsedRoute = { path: "/entities", pathParams: {}, queryParams: {} }
 
 // Get the base path for the application
-// In production, this should be '/mb-admin', in development it might be empty
+// In production, this should be '/mb', in development it might be empty
 export function getBasePath(): string {
   if (typeof window === "undefined") {
-    // Server-side: use env var or default to /mb-admin for production
-    return process.env.NEXT_PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/mb-admin' : '')
+    // Server-side: use env var or default to /mb for production
+    return process.env.NEXT_PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/mb' : '')
   }
   
   // Client-side: try to detect base path from current location
-  // If we're at /mb-admin/*, the base path is /mb-admin
+  // If we're at /mb/* or exactly /mb, the base path is /mb
   const pathname = window.location.pathname
-  if (pathname.startsWith("/mb-admin")) {
-    return "/mb-admin"
+  if (pathname === "/mb" || pathname.startsWith("/mb/")) {
+    return "/mb"
   }
   
   // Fallback: check if we're in production mode
   // In development, base path might be empty
   if (process.env.NODE_ENV === 'production') {
-    return process.env.NEXT_PUBLIC_BASE_PATH || "/mb-admin"
+    return process.env.NEXT_PUBLIC_BASE_PATH || "/mb"
   }
   
   // Development: no base path
