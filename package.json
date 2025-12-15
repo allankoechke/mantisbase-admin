@@ -1,6 +1,6 @@
 {
   "name": "mantis-admin",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "private": true,
   "scripts": {
     "export": "next build && next export",
