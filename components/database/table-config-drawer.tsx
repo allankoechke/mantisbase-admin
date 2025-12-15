@@ -81,7 +81,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const [activeTab, setActiveTab] = React.useState("schema")
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false)
   const [expandedFields, setExpandedFields] = React.useState<Set<string>>(new Set())
-  const [deletedColumns, setDeletedColumns] = React.useState<string[]>([]) // Track deleted field names
+  const [deletedColumns, setDeletedColumns] = React.useState<string[]>([]) // Track deleted field IDs
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const { toast } = useToast()
@@ -169,12 +169,15 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
 
     if (!(columns.length > 1 && !isSystemColumn))
       return
-    const col_name = column.name
 
     // Ensure the field we are deleting existed/exists in the table already
-    if (!deletedColumns.includes(col_name) && isAnExistingField(index)) {
-      // Add the column to the delete array
-      setDeletedColumns([...deletedColumns, col_name]);
+    if (isAnExistingField(index)) {
+      // Find the original field from the table schema to get its ID
+      const originalField = table.schema.fields.find((f: any) => f.name === column.old_name || f.name === column.name)
+      if (originalField?.id && !deletedColumns.includes(originalField.id)) {
+        // Add the field ID to the delete array
+        setDeletedColumns([...deletedColumns, originalField.id]);
+      }
     }
     setColumns(columns.filter((_, i) => i !== index))
   }
@@ -226,7 +229,16 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
         ...(col.old_name && { old_name: col.old_name }),
       }))
       
-      const body = { fields: transformedFields, deletedFields: deletedColumns };
+      // Add deleted fields to the fields array with op: "delete"
+      const deletedFields = deletedColumns.map((fieldId: string) => ({
+        id: fieldId,
+        op: "delete"
+      }))
+      
+      // Combine regular fields and deleted fields in the fields array
+      const allFields = [...transformedFields, ...deletedFields]
+      
+      const body = { fields: allFields };
       console.log(body)
       // return
       const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`, {
