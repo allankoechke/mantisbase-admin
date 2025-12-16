@@ -2,7 +2,7 @@
 
 A modern, web-based admin dashboard for managing your MantisBase backend. This dashboard provides an intuitive interface for managing entities, admins, settings, and more.
 
-![MantisBase Admin Dashboard](screenshot.png)
+![MantisBase Admin Dashboard](mantisbase-admin.png)
 
 ## 📋 Table of Contents
 
