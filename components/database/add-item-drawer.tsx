@@ -16,7 +16,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { ApiClient, TableMetadata } from "@/lib/api"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type { ApiClient, TableMetadata, TableField } from "@/lib/api"
 import { Badge } from "../ui/badge"
 import { useToast } from "@/hooks/use-toast"
 
@@ -34,16 +35,55 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
   const [isLoading, setIsLoading] = React.useState(false)
   const [isViewType, setIsViewIsViewType] = React.useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false)
+  const [fkRecords, setFkRecords] = React.useState<Record<string, any[]>>({}) // Store FK records by field name
   const { toast } = useToast()
+
+  // Fetch records for foreign key fields
+  const fetchForeignKeyRecords = React.useCallback(async (field: TableField) => {
+    if (!field.foreign_key?.entity) return
+
+    try {
+      const response = await apiClient.call<any>(`/api/v1/entities/${field.foreign_key.entity}`)
+      
+      // Handle paginated response
+      let records: any[] = []
+      if (Array.isArray(response)) {
+        records = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        records = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        records = response.data.items
+      }
+
+      setFkRecords(prev => ({
+        ...prev,
+        [field.name]: records
+      }))
+    } catch (error) {
+      console.error(`Failed to fetch records for FK field ${field.name}:`, error)
+      setFkRecords(prev => ({
+        ...prev,
+        [field.name]: []
+      }))
+    }
+  }, [apiClient])
 
   React.useEffect(() => {
     if (open) {
       setFormData({})
       setHasUnsavedChanges(false)
-      setTableFields(table.schema?.fields.filter(f => !isSystemGeneratedField(f)))
+      const fields = table.schema?.fields.filter(f => !isSystemGeneratedField(f)) || []
+      setTableFields(fields)
       setIsViewIsViewType(table?.schema.type === "view")
+      
+      // Fetch records for all foreign key fields
+      fields.forEach((field: any) => {
+        if (field.foreign_key?.entity) {
+          fetchForeignKeyRecords(field)
+        }
+      })
     }
-  }, [open])
+  }, [open, table, fetchForeignKeyRecords])
 
   const prepareRequestBody = (data: Record<string, any>, tableFields: TableField[]): FormData | string => {
     const hasFileField = tableFields.some(f => ["file", "files"].includes(f.type));
@@ -106,6 +146,11 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
   const castToType = (fieldName: string, value: any): any => {
     const field = tableFields?.find((f: any) => f.name === fieldName);
     if (!field) return value;
+
+    // For foreign key fields, return the value as-is (id string or null)
+    if (field.foreign_key && field.foreign_key.entity && field.foreign_key.field) {
+      return value === "null" ? null : value;
+    }
 
     const type = field.type;
 
@@ -239,13 +284,43 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                 </Badge>
               </div>
 
-              {tableFields?.map((field: any) => (
+              {tableFields?.map((field: any) => {
+                const isFkField = field.foreign_key && field.foreign_key.entity && field.foreign_key.field
+                const fkRecordsForField = fkRecords[field.name] || []
+                
+                return (
                 <div key={field.name} className="space-y-2">
                   <Label htmlFor={field.name} className="text-sm font-medium capitalize">
                     {field.name}
                     {(field.required || field.system) && <span className="text-red-500 ml-1">*</span>}
                   </Label>
-                  {field.type === "bool" ? (
+                  {isFkField ? (
+                    <Select
+                      value={formData[field.name] === null || formData[field.name] === undefined ? "null" : formData[field.name]}
+                      onValueChange={(value) => handleFieldChange(field.name, value === "null" ? null : value)}
+                      disabled={field.type === "view" || isSystemGeneratedField(field)}
+                    >
+                      <SelectTrigger className={field.type === "view" || isSystemGeneratedField(field) ? "bg-muted" : ""}>
+                        <SelectValue placeholder="Select a record or leave empty" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {!field.required && (
+                          <SelectItem value="null">(None)</SelectItem>
+                        )}
+                        {fkRecordsForField.map((record: any) => {
+                          const refFieldValue = record[field.foreign_key.field]
+                          const displayValue = refFieldValue !== undefined && refFieldValue !== null 
+                            ? String(refFieldValue) 
+                            : record.id
+                          return (
+                            <SelectItem key={record.id} value={record.id}>
+                              {displayValue} ({record.id})
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  ) : field.type === "bool" ? (
                     <div className="flex items-center gap-2">
                       <Switch
                         id={field.name}
@@ -317,7 +392,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                     />
                   )}
                 </div>
-              ))}
+              )})}
 
               {(!tableFields || tableFields.length === 0) &&
                 <p className="text-xs text-muted-foreground">No additional fields for input, proceed to create the record.</p>

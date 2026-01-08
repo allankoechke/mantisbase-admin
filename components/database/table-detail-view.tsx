@@ -23,9 +23,10 @@ interface TableDetailViewProps {
   apiClient: ApiClient
   onTableUpdate: (table: TableMetadata) => void
   onTablesUpdate?: (tables: TableMetadata[]) => void
+  tables?: TableMetadata[] // List of existing tables for foreign key entity selection
 }
 
-export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTablesUpdate }: TableDetailViewProps) {
+export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTablesUpdate, tables = [] }: TableDetailViewProps) {
   const [tableData, setTableData] = React.useState<any[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState(1)
@@ -469,6 +470,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
         onClose={() => setConfigOpen(false)}
         onTableUpdate={onTableUpdate}
         onTablesUpdate={onTablesUpdate}
+        tables={tables}
       />
 
       <TableRecordDocsDrawer table={table} open={docsOpen} onClose={() => setDocsOpen(false)} />

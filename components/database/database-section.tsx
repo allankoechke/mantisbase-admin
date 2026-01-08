@@ -165,7 +165,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
               />
             </div>
             <div className="flex gap-2">
-              <AddTableDialog apiClient={apiClient} onTablesUpdate={onTablesUpdate}>
+              <AddTableDialog apiClient={apiClient} onTablesUpdate={onTablesUpdate} tables={tables}>
                 <Button size="sm" className="flex-1">
                   <Plus className="h-4 w-4 mr-2" />
                   New
@@ -235,6 +235,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
               onTablesUpdate(updatedTables)
             }}
             onTablesUpdate={onTablesUpdate}
+            tables={tables}
           />
         ) : (
           <div className="flex items-center justify-center h-full">
@@ -247,7 +248,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                     Get started by creating your first entity. Entities are used to store and organize your data.
                   </p>
                   <div className="flex gap-3">
-                    <AddTableDialog apiClient={apiClient} onTablesUpdate={onTablesUpdate}>
+                    <AddTableDialog apiClient={apiClient} onTablesUpdate={onTablesUpdate} tables={tables}>
                       <Button>
                         <Plus className="h-4 w-4 mr-2" />
                         Create Entity

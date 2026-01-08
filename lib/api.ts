@@ -11,6 +11,13 @@ export interface FieldConstraints {
   validator: string | null
 }
 
+export interface ForeignKeyConfig {
+  entity: string // table name
+  field: string // column ref
+  on_update?: string // optional
+  on_delete?: string // optional
+}
+
 export interface TableField {
   id: string
   name: string
@@ -20,6 +27,7 @@ export interface TableField {
   type: string
   unique: boolean
   constraints: FieldConstraints
+  foreign_key?: ForeignKeyConfig // optional foreign key configuration
 }
 
 export interface RuleConfig {

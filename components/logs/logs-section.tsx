@@ -1,14 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { Download, Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { Download, Search, RefreshCw, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Pagination,
   PaginationContent,
@@ -18,155 +23,126 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import type { ApiClient } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 
 interface LogEntry {
   id: string
   timestamp: string
-  level: "info" | "warning" | "error"
+  created_at: number
+  level: "critical" | "warn" | "info" | "debug" | "trace"
   message: string
-  source: string
+  origin: string
   details?: string
+  data?: any // Optional JSON value (object/array/value/etc.)
+}
+
+interface PaginatedLogsResponse {
+  items: LogEntry[]
+  items_count: number
+  page: number
+  page_size: number
+  total_count: number
 }
 
 interface LogsSectionProps {
   apiClient: ApiClient
 }
 
-const ITEMS_PER_PAGE = 10
+const ITEMS_PER_PAGE = 100
 
 export function LogsSection({ apiClient }: LogsSectionProps) {
-  // Mock data - sorted by latest first
-  const [allLogs] = React.useState<LogEntry[]>([
-    {
-      id: "1",
-      timestamp: "2024-01-15T10:30:00Z",
-      level: "info",
-      message: "User login successful",
-      source: "auth",
-      details: "User admin@example.com logged in from IP 192.168.1.1",
-    },
-    {
-      id: "2",
-      timestamp: "2024-01-15T10:25:00Z",
-      level: "warning",
-      message: "Rate limit approaching",
-      source: "api",
-      details: "API rate limit at 80% for endpoint /api/v1/tables",
-    },
-    {
-      id: "3",
-      timestamp: "2024-01-15T10:20:00Z",
-      level: "error",
-      message: "Database connection failed",
-      source: "database",
-      details: "Connection timeout after 30 seconds",
-    },
-    {
-      id: "4",
-      timestamp: "2024-01-15T10:15:00Z",
-      level: "info",
-      message: "Table created successfully",
-      source: "database",
-      details: "New table 'products' created with 5 columns",
-    },
-    {
-      id: "5",
-      timestamp: "2024-01-15T10:10:00Z",
-      level: "info",
-      message: "Backup completed",
-      source: "system",
-      details: "Daily backup completed successfully (2.3GB)",
-    },
-    {
-      id: "6",
-      timestamp: "2024-01-15T10:05:00Z",
-      level: "info",
-      message: "Cache cleared",
-      source: "system",
-      details: "Application cache cleared successfully",
-    },
-    {
-      id: "7",
-      timestamp: "2024-01-15T10:00:00Z",
-      level: "warning",
-      message: "High memory usage detected",
-      source: "system",
-      details: "Memory usage at 85% of available capacity",
-    },
-    {
-      id: "8",
-      timestamp: "2024-01-15T09:55:00Z",
-      level: "info",
-      message: "Scheduled task completed",
-      source: "system",
-      details: "Daily maintenance task completed in 2.3 seconds",
-    },
-    {
-      id: "9",
-      timestamp: "2024-01-15T09:50:00Z",
-      level: "error",
-      message: "Failed to send email notification",
-      source: "email",
-      details: "SMTP server connection timeout",
-    },
-    {
-      id: "10",
-      timestamp: "2024-01-15T09:45:00Z",
-      level: "info",
-      message: "API request processed",
-      source: "api",
-      details: "GET /api/v1/users processed in 45ms",
-    },
-    {
-      id: "11",
-      timestamp: "2024-01-15T09:40:00Z",
-      level: "info",
-      message: "User session expired",
-      source: "auth",
-      details: "Session expired for user user@example.com",
-    },
-    {
-      id: "12",
-      timestamp: "2024-01-15T09:35:00Z",
-      level: "warning",
-      message: "Slow query detected",
-      source: "database",
-      details: "Query took 2.5 seconds to execute",
-    },
-  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()))
-
-  const [searchTerm, setSearchTerm] = React.useState("")
-  const [levelFilter, setLevelFilter] = React.useState<string>("all")
+  const [logs, setLogs] = React.useState<LogEntry[]>([])
+  const [isLoading, setIsLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalCount, setTotalCount] = React.useState<number>(-1) // -1 means unknown
+  const [searchTerm, setSearchTerm] = React.useState("")
+  const [levelFilter, setLevelFilter] = React.useState<string>("all") // Exact level filter
+  const [minLevelFilter, setMinLevelFilter] = React.useState<string>("trace") // Minimum level filter (default)
+  const [useMinLevel, setUseMinLevel] = React.useState<boolean>(true) // Use minimum level by default
+  const [selectedLog, setSelectedLog] = React.useState<LogEntry | null>(null)
+  const [drawerOpen, setDrawerOpen] = React.useState(false)
+  const { toast } = useToast()
 
-  const filteredLogs = React.useMemo(() => {
-    return allLogs.filter((log) => {
-      const matchesSearch =
-        log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (log.details && log.details.toLowerCase().includes(searchTerm.toLowerCase()))
-      const matchesLevel = levelFilter === "all" || log.level === levelFilter
-      return matchesSearch && matchesLevel
-    })
-  }, [allLogs, searchTerm, levelFilter])
+  const loadLogs = React.useCallback(async (page: number = 1) => {
+    setIsLoading(true)
+    try {
+      // Build query parameters
+      const params = new URLSearchParams()
+      params.append("page", page.toString())
+      params.append("page_size", ITEMS_PER_PAGE.toString())
+      
+      // Add level filter - use minimum level by default, or exact level if specified
+      if (useMinLevel && minLevelFilter) {
+        params.append("min_level", minLevelFilter)
+      } else if (!useMinLevel && levelFilter !== "all") {
+        params.append("level", levelFilter)
+      }
+      
+      // Add search term if provided
+      if (searchTerm.trim()) {
+        params.append("search", searchTerm.trim())
+      }
 
-  const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE)
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const endIndex = startIndex + ITEMS_PER_PAGE
-  const paginatedLogs = filteredLogs.slice(startIndex, endIndex)
+      const response = await apiClient.call<PaginatedLogsResponse>(`/api/v1/sys/logs?${params.toString()}`)
 
+      // Handle different response structures
+      let logsData: LogEntry[] = []
+      let count = -1
+
+      if (Array.isArray(response)) {
+        // Fallback: if response is directly an array
+        logsData = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        // Paginated response
+        logsData = response.items
+        count = response.total_count ?? -1
+      } else if ((response as any)?.data?.items && Array.isArray((response as any).data.items)) {
+        // If data is nested (handle as any for nested structure)
+        logsData = (response as any).data.items
+        count = (response as any).data.total_count ?? -1
+      } else {
+        console.warn("Unexpected response format:", response)
+        logsData = []
+      }
+
+      setLogs(logsData)
+      setTotalCount(count)
+    } catch (error: any) {
+      console.error("Failed to load logs:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error?.message || "Failed to load logs",
+      })
+      setLogs([])
+      setTotalCount(-1)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [apiClient, levelFilter, minLevelFilter, useMinLevel, searchTerm, toast])
+
+  // Load logs when component mounts or filters change
   React.useEffect(() => {
-    // Reset to first page when filters change
+    loadLogs(currentPage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, levelFilter, minLevelFilter, useMinLevel, searchTerm])
+
+  // Reset to first page when filters change
+  React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, levelFilter])
+  }, [searchTerm, levelFilter, minLevelFilter, useMinLevel])
 
   const getLevelColor = (level: string) => {
     switch (level) {
-      case "error":
+      case "critical":
         return "destructive"
-      case "warning":
+      case "warn":
         return "secondary"
       case "info":
+        return "outline"
+      case "debug":
+        return "outline"
+      case "trace":
         return "outline"
       default:
         return "outline"
@@ -185,6 +161,46 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
     })
   }
 
+  const formatData = (data: any): string => {
+    if (data === null || data === undefined) {
+      return ""
+    }
+    try {
+      return JSON.stringify(data, null, 2)
+    } catch {
+      return String(data)
+    }
+  }
+
+  const handleLogClick = (log: LogEntry) => {
+    setSelectedLog(log)
+    setDrawerOpen(true)
+  }
+
+  const handleDrawerClose = () => {
+    setDrawerOpen(false)
+    setSelectedLog(null)
+  }
+
+  // Calculate total pages (show -- if total_count is -1)
+  const totalPages = totalCount === -1 ? null : Math.ceil(totalCount / ITEMS_PER_PAGE)
+  const hasMorePages = totalCount === -1 || (totalPages !== null && currentPage < totalPages)
+
+  const handleSearch = () => {
+    setCurrentPage(1)
+    loadLogs(1)
+  }
+
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSearch()
+    }
+  }
+
+  const handleReload = () => {
+    loadLogs(currentPage)
+  }
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -193,10 +209,15 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
           <h1 className="text-3xl font-bold tracking-tight">Logs</h1>
           <p className="text-muted-foreground">Monitor system activity and events</p>
         </div>
-        <Button>
-          <Download className="h-4 w-4 mr-2" />
-          Export
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleReload} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
+          <Button variant="outline" disabled>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -209,20 +230,47 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
                 placeholder="Search logs..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={handleSearchKeyPress}
                 className="pl-9"
               />
             </div>
-            <Select value={levelFilter} onValueChange={setLevelFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-              </SelectContent>
-            </Select>
+            <Tabs value={useMinLevel ? "min" : "exact"} onValueChange={(value) => setUseMinLevel(value === "min")} className="w-auto">
+              <TabsList>
+                <TabsTrigger value="min">Minimum Level</TabsTrigger>
+                <TabsTrigger value="exact">Exact Level</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {useMinLevel ? (
+              <Select value={minLevelFilter} onValueChange={setMinLevelFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Min Level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trace">Trace+</SelectItem>
+                  <SelectItem value="debug">Debug+</SelectItem>
+                  <SelectItem value="info">Info+</SelectItem>
+                  <SelectItem value="warn">Warn+</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={levelFilter} onValueChange={setLevelFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="All Levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Levels</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="warn">Warn</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                  <SelectItem value="debug">Debug</SelectItem>
+                  <SelectItem value="trace">Trace</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            <Button onClick={handleSearch} variant="outline">
+              Search
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -234,110 +282,261 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
             <div>
               <CardTitle>System Logs</CardTitle>
               <CardDescription>
-                Showing {startIndex + 1}-{Math.min(endIndex, filteredLogs.length)} of {filteredLogs.length} entries
+                {isLoading ? (
+                  "Loading logs..."
+                ) : totalCount === -1 ? (
+                  `Showing page ${currentPage} (-- total entries)`
+                ) : (
+                  `Showing ${(currentPage - 1) * ITEMS_PER_PAGE + 1}-${Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of ${totalCount} entries`
+                )}
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[180px]">Timestamp</TableHead>
-                  <TableHead className="w-[100px]">Level</TableHead>
-                  <TableHead className="w-[120px]">Source</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead className="max-w-md">Details</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedLogs.length === 0 ? (
+          {isLoading && logs.length === 0 ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading logs...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                      No logs found
-                    </TableCell>
+                    <TableHead className="w-[180px]">Timestamp</TableHead>
+                    <TableHead className="w-[100px]">Level</TableHead>
+                    <TableHead className="w-[120px]">Origin</TableHead>
+                    <TableHead>Message</TableHead>
+                    <TableHead className="max-w-md">Details</TableHead>
+                    <TableHead className="max-w-md">Data</TableHead>
                   </TableRow>
-                ) : (
-                  paginatedLogs.map((log) => (
-                    <TableRow key={log.id} className="hover:bg-muted/50">
-                      <TableCell className="font-mono text-xs">
-                        {formatTimestamp(log.timestamp)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getLevelColor(log.level) as any} className="font-medium">
-                          {log.level.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium capitalize">{log.source}</span>
-                      </TableCell>
-                      <TableCell className="font-medium">{log.message}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        <div className="max-w-md truncate" title={log.details}>
-                          {log.details || "-"}
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {logs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        No logs found
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    logs.map((log) => (
+                      <TableRow 
+                        key={log.id} 
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => handleLogClick(log)}
+                      >
+                        <TableCell className="font-mono text-xs">
+                          {formatTimestamp(log.timestamp)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getLevelColor(log.level) as any} className="font-medium">
+                            {log.level.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">{log.origin}</span>
+                        </TableCell>
+                        <TableCell className="font-medium">{log.message}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          <div className="max-w-md truncate" title={log.details}>
+                            {log.details || "-"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground font-mono">
+                          {log.data !== undefined && log.data !== null ? (
+                            <div className="max-w-md truncate" title={formatData(log.data)}>
+                              {formatData(log.data)}
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {(totalPages !== null && totalPages > 1) || hasMorePages ? (
             <div className="mt-4 flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
+                Page {currentPage} {totalPages !== null ? `of ${totalPages}` : "(--)"}
               </div>
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious
-                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      onClick={() => {
+                        if (currentPage > 1) {
+                          setCurrentPage((prev) => prev - 1)
+                        }
+                      }}
                       className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                     />
                   </PaginationItem>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                    // Show first page, last page, current page, and pages around current
-                    if (
-                      page === 1 ||
-                      page === totalPages ||
-                      (page >= currentPage - 1 && page <= currentPage + 1)
-                    ) {
-                      return (
-                        <PaginationItem key={page}>
-                          <PaginationLink
-                            onClick={() => setCurrentPage(page)}
-                            isActive={currentPage === page}
-                            className="cursor-pointer"
-                          >
-                            {page}
-                          </PaginationLink>
-                        </PaginationItem>
-                      )
-                    } else if (page === currentPage - 2 || page === currentPage + 2) {
-                      return (
-                        <PaginationItem key={page}>
-                          <span className="px-2">...</span>
-                        </PaginationItem>
-                      )
-                    }
-                    return null
-                  })}
+                  {totalPages !== null ? (
+                    // Show page numbers when we know the total
+                    Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                      // Show first page, last page, current page, and pages around current
+                      if (
+                        page === 1 ||
+                        page === totalPages ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      ) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              onClick={() => setCurrentPage(page)}
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        )
+                      } else if (page === currentPage - 2 || page === currentPage + 2) {
+                        return (
+                          <PaginationItem key={page}>
+                            <span className="px-2">...</span>
+                          </PaginationItem>
+                        )
+                      }
+                      return null
+                    })
+                  ) : (
+                    // Show current page only when total is unknown
+                    <PaginationItem>
+                      <PaginationLink isActive className="cursor-default">
+                        {currentPage}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )}
                   <PaginationItem>
                     <PaginationNext
-                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      onClick={() => {
+                        if (totalPages === null || currentPage < totalPages) {
+                          setCurrentPage((prev) => prev + 1)
+                        }
+                      }}
+                      className={
+                        totalPages !== null && currentPage >= totalPages
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
                     />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
+
+      {/* Log Details Drawer */}
+      <Drawer open={drawerOpen} onOpenChange={handleDrawerClose}>
+        <DrawerContent side="right" className="w-[800px] max-w-[95vw]">
+          <DrawerHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Badge variant={selectedLog ? (getLevelColor(selectedLog.level) as any) : "outline"} className="font-medium">
+                  {selectedLog?.level.toUpperCase() || "LOG"}
+                </Badge>
+                <DrawerTitle>Log Details</DrawerTitle>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleDrawerClose}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <DrawerDescription>
+              Full details for log entry {selectedLog?.id}
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-6 space-y-6">
+                {selectedLog && (
+                  <>
+                    {/* Basic Information */}
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">ID</Label>
+                        <p className="text-sm font-mono mt-1">{selectedLog.id}</p>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Timestamp</Label>
+                        <p className="text-sm mt-1">{formatTimestamp(selectedLog.timestamp)}</p>
+                        <p className="text-xs text-muted-foreground font-mono mt-1">{selectedLog.timestamp}</p>
+                        {selectedLog.created_at && (
+                          <p className="text-xs text-muted-foreground mt-1">Created at: {selectedLog.created_at}</p>
+                        )}
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Level</Label>
+                        <div className="mt-1">
+                          <Badge variant={getLevelColor(selectedLog.level) as any} className="font-medium">
+                            {selectedLog.level.toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Origin</Label>
+                        <p className="text-sm mt-1">{selectedLog.origin}</p>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Message</Label>
+                        <p className="text-sm mt-1">{selectedLog.message}</p>
+                      </div>
+                      
+                      {selectedLog.details && (
+                        <>
+                          <Separator />
+                          <div>
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Details</Label>
+                            <p className="text-sm mt-1 whitespace-pre-wrap">{selectedLog.details}</p>
+                          </div>
+                        </>
+                      )}
+                      
+                      {selectedLog.data !== undefined && selectedLog.data !== null && (
+                        <>
+                          <Separator />
+                          <div>
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Data (JSON)</Label>
+                            <div className="mt-2 p-4 bg-muted rounded-md border">
+                              <pre className="text-xs font-mono overflow-x-auto">
+                                {formatData(selectedLog.data)}
+                              </pre>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }
