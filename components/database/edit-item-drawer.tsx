@@ -16,7 +16,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ApiClient, TableMetadata, getApiBaseUrl } from "@/lib/api"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ApiClient, TableMetadata, getApiBaseUrl, TableField } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 interface EditItemDrawerProps {
@@ -115,16 +116,55 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
   const [isLoading, setIsLoading] = React.useState(false)
   const [isViewType, setIsViewIsViewType] = React.useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false)
+  const [fkRecords, setFkRecords] = React.useState<Record<string, any[]>>({}) // Store FK records by field name
   const { toast } = useToast()
+
+  // Fetch records for foreign key fields
+  const fetchForeignKeyRecords = React.useCallback(async (field: TableField) => {
+    if (!field.foreign_key?.entity) return
+
+    try {
+      const response = await apiClient.call<any>(`/api/v1/entities/${field.foreign_key.entity}`)
+      
+      // Handle paginated response
+      let records: any[] = []
+      if (Array.isArray(response)) {
+        records = response
+      } else if (response?.items && Array.isArray(response.items)) {
+        records = response.items
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        records = response.data.items
+      }
+
+      setFkRecords(prev => ({
+        ...prev,
+        [field.name]: records
+      }))
+    } catch (error) {
+      console.error(`Failed to fetch records for FK field ${field.name}:`, error)
+      setFkRecords(prev => ({
+        ...prev,
+        [field.name]: []
+      }))
+    }
+  }, [apiClient])
 
   React.useEffect(() => {
     if (open && item) {
       setFormData({ ...item })
       setHasUnsavedChanges(false)
-      setTableFields(table.schema?.fields.filter(f => !isSystemGeneratedField(f)))
+      const fields = table.schema?.fields.filter(f => !isSystemGeneratedField(f)) || []
+      setTableFields(fields)
       setIsViewIsViewType(table?.schema?.type === "view")
+      
+      // Fetch records for all foreign key fields
+      fields.forEach((field: any) => {
+        if (field.foreign_key?.entity) {
+          fetchForeignKeyRecords(field)
+        }
+      })
     }
-  }, [open, item])
+  }, [open, item, table, fetchForeignKeyRecords])
 
   const prepareRequestBody = (data: Record<string, any>, tableFields: TableField[]): FormData | string => {
     const hasFileField = tableFields.some(f => ["file", "files"].includes(f.type));
@@ -219,6 +259,12 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
   const castToType = (fieldName: string, value: any): any => {
     const field = tableFields?.find((f: any) => f.name === fieldName);
     if (!field) return value;
+    
+    // For foreign key fields, return the value as-is (id string or null)
+    if (field.foreign_key && field.foreign_key.entity && field.foreign_key.field) {
+      return value === "null" ? null : value;
+    }
+    
     if (!value) return null; // handle null or undefined values
 
     const type = field.type;
@@ -334,6 +380,8 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                 const isDisabled = (field.type === "view" || isSystemGeneratedField(field));
                 const value = formData[field.name];
                 const isFileField = field.type === "file" || field.type === "files";
+                const isFkField = field.foreign_key && field.foreign_key.entity && field.foreign_key.field
+                const fkRecordsForField = fkRecords[field.name] || []
 
                 return (
                   <div key={field.name} className="space-y-2">
@@ -342,8 +390,34 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </Label>
 
-                    {/* FILE/FILES PREVIEW */}
-                    {isFileField ? (
+                    {/* FOREIGN KEY FIELD */}
+                    {isFkField ? (
+                      <Select
+                        value={value === null || value === undefined ? "null" : value}
+                        onValueChange={(selectedValue) => handleFieldChange(field.name, selectedValue === "null" ? null : selectedValue)}
+                        disabled={isDisabled}
+                      >
+                        <SelectTrigger className={isDisabled ? "bg-muted" : ""}>
+                          <SelectValue placeholder="Select a record or leave empty" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {!field.required && (
+                            <SelectItem value="null">(None)</SelectItem>
+                          )}
+                          {fkRecordsForField.map((record: any) => {
+                            const refFieldValue = record[field.foreign_key.field]
+                            const displayValue = refFieldValue !== undefined && refFieldValue !== null 
+                              ? String(refFieldValue) 
+                              : record.id
+                            return (
+                              <SelectItem key={record.id} value={record.id}>
+                                {displayValue} ({record.id})
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+                    ) : isFileField ? (
                       <FilePreviewField
                         field={field}
                         value={value}

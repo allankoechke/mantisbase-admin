@@ -1,14 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { Download, Search, RefreshCw } from "lucide-react"
+import { Download, Search, RefreshCw, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Pagination,
   PaginationContent,
@@ -43,7 +48,7 @@ interface LogsSectionProps {
   apiClient: ApiClient
 }
 
-const ITEMS_PER_PAGE = 10
+const ITEMS_PER_PAGE = 100
 
 export function LogsSection({ apiClient }: LogsSectionProps) {
   const [logs, setLogs] = React.useState<LogEntry[]>([])
@@ -51,7 +56,11 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
   const [currentPage, setCurrentPage] = React.useState(1)
   const [totalCount, setTotalCount] = React.useState<number>(-1) // -1 means unknown
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [levelFilter, setLevelFilter] = React.useState<string>("all")
+  const [levelFilter, setLevelFilter] = React.useState<string>("all") // Exact level filter
+  const [minLevelFilter, setMinLevelFilter] = React.useState<string>("trace") // Minimum level filter (default)
+  const [useMinLevel, setUseMinLevel] = React.useState<boolean>(true) // Use minimum level by default
+  const [selectedLog, setSelectedLog] = React.useState<LogEntry | null>(null)
+  const [drawerOpen, setDrawerOpen] = React.useState(false)
   const { toast } = useToast()
 
   const loadLogs = React.useCallback(async (page: number = 1) => {
@@ -62,8 +71,10 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
       params.append("page", page.toString())
       params.append("page_size", ITEMS_PER_PAGE.toString())
       
-      // Add level filter if not "all"
-      if (levelFilter !== "all") {
+      // Add level filter - use minimum level by default, or exact level if specified
+      if (useMinLevel && minLevelFilter) {
+        params.append("min_level", minLevelFilter)
+      } else if (!useMinLevel && levelFilter !== "all") {
         params.append("level", levelFilter)
       }
       
@@ -108,17 +119,18 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [apiClient, levelFilter, searchTerm, toast])
+  }, [apiClient, levelFilter, minLevelFilter, useMinLevel, searchTerm, toast])
 
   // Load logs when component mounts or filters change
   React.useEffect(() => {
     loadLogs(currentPage)
-  }, [currentPage, levelFilter, searchTerm])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, levelFilter, minLevelFilter, useMinLevel, searchTerm])
 
   // Reset to first page when filters change
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, levelFilter])
+  }, [searchTerm, levelFilter, minLevelFilter, useMinLevel])
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -158,6 +170,16 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
     } catch {
       return String(data)
     }
+  }
+
+  const handleLogClick = (log: LogEntry) => {
+    setSelectedLog(log)
+    setDrawerOpen(true)
+  }
+
+  const handleDrawerClose = () => {
+    setDrawerOpen(false)
+    setSelectedLog(null)
   }
 
   // Calculate total pages (show -- if total_count is -1)
@@ -212,19 +234,40 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
                 className="pl-9"
               />
             </div>
-            <Select value={levelFilter} onValueChange={setLevelFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="critical">Critical</SelectItem>
-                <SelectItem value="warn">Warn</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="debug">Debug</SelectItem>
-                <SelectItem value="trace">Trace</SelectItem>
-              </SelectContent>
-            </Select>
+            <Tabs value={useMinLevel ? "min" : "exact"} onValueChange={(value) => setUseMinLevel(value === "min")} className="w-auto">
+              <TabsList>
+                <TabsTrigger value="min">Minimum Level</TabsTrigger>
+                <TabsTrigger value="exact">Exact Level</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {useMinLevel ? (
+              <Select value={minLevelFilter} onValueChange={setMinLevelFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Min Level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trace">Trace+</SelectItem>
+                  <SelectItem value="debug">Debug+</SelectItem>
+                  <SelectItem value="info">Info+</SelectItem>
+                  <SelectItem value="warn">Warn+</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={levelFilter} onValueChange={setLevelFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="All Levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Levels</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="warn">Warn</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                  <SelectItem value="debug">Debug</SelectItem>
+                  <SelectItem value="trace">Trace</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Button onClick={handleSearch} variant="outline">
               Search
             </Button>
@@ -280,7 +323,11 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
                     </TableRow>
                   ) : (
                     logs.map((log) => (
-                      <TableRow key={log.id} className="hover:bg-muted/50">
+                      <TableRow 
+                        key={log.id} 
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => handleLogClick(log)}
+                      >
                         <TableCell className="font-mono text-xs">
                           {formatTimestamp(log.timestamp)}
                         </TableCell>
@@ -390,6 +437,106 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* Log Details Drawer */}
+      <Drawer open={drawerOpen} onOpenChange={handleDrawerClose}>
+        <DrawerContent side="right" className="w-[800px] max-w-[95vw]">
+          <DrawerHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Badge variant={selectedLog ? (getLevelColor(selectedLog.level) as any) : "outline"} className="font-medium">
+                  {selectedLog?.level.toUpperCase() || "LOG"}
+                </Badge>
+                <DrawerTitle>Log Details</DrawerTitle>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleDrawerClose}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <DrawerDescription>
+              Full details for log entry {selectedLog?.id}
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-6 space-y-6">
+                {selectedLog && (
+                  <>
+                    {/* Basic Information */}
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">ID</Label>
+                        <p className="text-sm font-mono mt-1">{selectedLog.id}</p>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Timestamp</Label>
+                        <p className="text-sm mt-1">{formatTimestamp(selectedLog.timestamp)}</p>
+                        <p className="text-xs text-muted-foreground font-mono mt-1">{selectedLog.timestamp}</p>
+                        {selectedLog.created_at && (
+                          <p className="text-xs text-muted-foreground mt-1">Created at: {selectedLog.created_at}</p>
+                        )}
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Level</Label>
+                        <div className="mt-1">
+                          <Badge variant={getLevelColor(selectedLog.level) as any} className="font-medium">
+                            {selectedLog.level.toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Origin</Label>
+                        <p className="text-sm mt-1">{selectedLog.origin}</p>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Message</Label>
+                        <p className="text-sm mt-1">{selectedLog.message}</p>
+                      </div>
+                      
+                      {selectedLog.details && (
+                        <>
+                          <Separator />
+                          <div>
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Details</Label>
+                            <p className="text-sm mt-1 whitespace-pre-wrap">{selectedLog.details}</p>
+                          </div>
+                        </>
+                      )}
+                      
+                      {selectedLog.data !== undefined && selectedLog.data !== null && (
+                        <>
+                          <Separator />
+                          <div>
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase">Data (JSON)</Label>
+                            <div className="mt-2 p-4 bg-muted rounded-md border">
+                              <pre className="text-xs font-mono overflow-x-auto">
+                                {formatData(selectedLog.data)}
+                              </pre>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }

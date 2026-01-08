@@ -31,10 +31,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { ApiClient, TableMetadata } from "@/lib/api"
+import type { ApiClient, TableMetadata, ForeignKeyConfig } from "@/lib/api"
 import { dataTypes } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "@/lib/router"
+
+
 import { cn } from "@/lib/utils"
 
 interface TableConfigDrawerProps {
@@ -44,6 +46,7 @@ interface TableConfigDrawerProps {
   onClose: () => void
   onTableUpdate: (table: TableMetadata) => void
   onTablesUpdate?: (tables: TableMetadata[]) => void
+  tables?: TableMetadata[] // List of existing tables for foreign key entity selection
 }
 
 // The update structure for tables is a s follows
@@ -62,7 +65,7 @@ interface TableConfigDrawerProps {
 */
 
 // NOTE: We don't support changing of field names yet!
-export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpdate, onTablesUpdate }: TableConfigDrawerProps) {
+export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpdate, onTablesUpdate, tables = [] }: TableConfigDrawerProps) {
   const [columns, setColumns] = React.useState<any[]>([])
   const [rules, setRules] = React.useState<{
     list: { mode: string; expr: string }
@@ -102,6 +105,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
         maxValue: col.constraints?.max_value || null,
         defaultValue: col.constraints?.default_value || null,
         validator: col.constraints?.validator || null,
+        // Include foreign_key if present
+        foreign_key: col.foreign_key,
       })) || []
       setColumns(transformedColumns)
       // Initialize rules with mode and expr from API
@@ -196,7 +201,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const updateColumn = (index: number, field: string, value: any) => {
     const updatedColumns = columns.map((col, i) => {
       if (i === index) {
-        var updated = col
+        var updated = { ...col }
         updated[field] = value
         return updated;
       }
@@ -208,26 +213,39 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
     setHasUnsavedChanges(true)
   }
 
+  // Get fields for a selected entity (for foreign key field selector)
+  const getEntityFields = (entityName: string): any[] => {
+    const entity = tables.find(t => t.schema.name === entityName)
+    return entity?.schema.fields || []
+  }
+
   const handleSaveSchema = async () => {
     setIsLoading(true)
     try {
       // Transform UI format (camelCase flat) to API format (with constraints and snake_case)
-      const transformedFields = columns.map((col: any) => ({
-        id: col.id,
-        name: col.name,
-        type: col.type,
-        primary_key: col.primaryKey !== undefined ? col.primaryKey : col.primary_key,
-        required: col.required,
-        system: col.system || false,
-        unique: col.unique || false,
-        constraints: {
-          default_value: col.defaultValue !== undefined ? col.defaultValue : (col.constraints?.default_value || null),
-          max_value: col.maxValue !== undefined ? col.maxValue : (col.constraints?.max_value || null),
-          min_value: col.minValue !== undefined ? col.minValue : (col.constraints?.min_value || null),
-          validator: col.validator !== undefined ? col.validator : (col.constraints?.validator || null),
-        },
-        ...(col.old_name && { old_name: col.old_name }),
-      }))
+      const transformedFields = columns.map((col: any) => {
+        const fieldData: any = {
+          id: col.id,
+          name: col.name,
+          type: col.type,
+          primary_key: col.primaryKey !== undefined ? col.primaryKey : col.primary_key,
+          required: col.required,
+          system: col.system || false,
+          unique: col.unique || false,
+          constraints: {
+            default_value: col.defaultValue !== undefined ? col.defaultValue : (col.constraints?.default_value || null),
+            max_value: col.maxValue !== undefined ? col.maxValue : (col.constraints?.max_value || null),
+            min_value: col.minValue !== undefined ? col.minValue : (col.constraints?.min_value || null),
+            validator: col.validator !== undefined ? col.validator : (col.constraints?.validator || null),
+          },
+          ...(col.old_name && { old_name: col.old_name }),
+        }
+        // Include foreign_key if configured
+        if (col.foreign_key && col.foreign_key.entity && col.foreign_key.field) {
+          fieldData.foreign_key = col.foreign_key
+        }
+        return fieldData
+      })
       
       // Add deleted fields to the fields array with op: "delete"
       const deletedFields = deletedColumns.map((fieldId: string) => ({
@@ -609,6 +627,123 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                       onChange={(e) => updateColumn(index, "validator", e.target.value || null)}
                                       className="h-8 text-xs"
                                     />
+                                  </div>
+                                  
+                                  {/* Foreign Key Configuration */}
+                                  <div className="space-y-3 pt-2 border-t">
+                                    <Label className="text-xs font-semibold">Foreign Key</Label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="space-y-1">
+                                        <Label htmlFor={`fk-entity-${fieldKey}`} className="text-xs">
+                                          Entity
+                                        </Label>
+                                        <Select
+                                          value={column.foreign_key?.entity || ""}
+                                          onValueChange={(value) => {
+                                            updateColumn(index, "foreign_key", {
+                                              ...column.foreign_key,
+                                              entity: value,
+                                              field: "", // Reset field when entity changes
+                                            } as ForeignKeyConfig)
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs">
+                                            <SelectValue placeholder="Select entity" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {tables
+                                              .filter(t => t.schema.name !== table.schema.name) // Don't allow self-reference
+                                              .map((t) => (
+                                                <SelectItem key={t.schema.name} value={t.schema.name}>
+                                                  {t.schema.name}
+                                                </SelectItem>
+                                              ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label htmlFor={`fk-field-${fieldKey}`} className="text-xs">
+                                          Field
+                                        </Label>
+                                        <Select
+                                          value={column.foreign_key?.field || ""}
+                                          onValueChange={(value) => {
+                                            updateColumn(index, "foreign_key", {
+                                              ...column.foreign_key,
+                                              field: value,
+                                            } as ForeignKeyConfig)
+                                          }}
+                                          disabled={!column.foreign_key?.entity}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs" disabled={!column.foreign_key?.entity}>
+                                            <SelectValue placeholder="Select field" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {column.foreign_key?.entity
+                                              ? getEntityFields(column.foreign_key.entity).map((f: any) => (
+                                                  <SelectItem key={f.id} value={f.name}>
+                                                    {f.name}
+                                                  </SelectItem>
+                                                ))
+                                              : null}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="space-y-1">
+                                        <Label htmlFor={`fk-on-update-${fieldKey}`} className="text-xs">
+                                          On Update
+                                        </Label>
+                                        <Select
+                                          value={column.foreign_key?.on_update || undefined}
+                                          onValueChange={(value) => {
+                                            updateColumn(index, "foreign_key", {
+                                              ...column.foreign_key,
+                                              on_update: value === "none" ? undefined : value,
+                                            } as ForeignKeyConfig)
+                                          }}
+                                          disabled={!column.foreign_key?.entity || !column.foreign_key?.field}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs" disabled={!column.foreign_key?.entity || !column.foreign_key?.field}>
+                                            <SelectValue placeholder="Optional" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="none">None</SelectItem>
+                                            <SelectItem value="CASCADE">CASCADE</SelectItem>
+                                            <SelectItem value="SET NULL">SET NULL</SelectItem>
+                                            <SelectItem value="RESTRICT">RESTRICT</SelectItem>
+                                            <SelectItem value="NO ACTION">NO ACTION</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label htmlFor={`fk-on-delete-${fieldKey}`} className="text-xs">
+                                          On Delete
+                                        </Label>
+                                        <Select
+                                          value={column.foreign_key?.on_delete || undefined}
+                                          onValueChange={(value) => {
+                                            updateColumn(index, "foreign_key", {
+                                              ...column.foreign_key,
+                                              on_delete: value === "none" ? undefined : value,
+                                            } as ForeignKeyConfig)
+                                          }}
+                                          disabled={!column.foreign_key?.entity || !column.foreign_key?.field}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs" disabled={!column.foreign_key?.entity || !column.foreign_key?.field}>
+                                            <SelectValue placeholder="Optional" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="none">None</SelectItem>
+                                            <SelectItem value="CASCADE">CASCADE</SelectItem>
+                                            <SelectItem value="SET NULL">SET NULL</SelectItem>
+                                            <SelectItem value="RESTRICT">RESTRICT</SelectItem>
+                                            <SelectItem value="NO ACTION">NO ACTION</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
                                   </div>
                                 </CollapsibleContent>
                               </Collapsible>
