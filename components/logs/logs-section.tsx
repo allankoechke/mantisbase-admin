@@ -57,7 +57,7 @@ export function LogsSection({ apiClient }: LogsSectionProps) {
   const [totalCount, setTotalCount] = React.useState<number>(-1) // -1 means unknown
   const [searchTerm, setSearchTerm] = React.useState("")
   const [levelFilter, setLevelFilter] = React.useState<string>("all") // Exact level filter
-  const [minLevelFilter, setMinLevelFilter] = React.useState<string>("trace") // Minimum level filter (default)
+  const [minLevelFilter, setMinLevelFilter] = React.useState<string>("info") // Minimum level filter (default: info+)
   const [useMinLevel, setUseMinLevel] = React.useState<boolean>(true) // Use minimum level by default
   const [selectedLog, setSelectedLog] = React.useState<LogEntry | null>(null)
   const [drawerOpen, setDrawerOpen] = React.useState(false)
