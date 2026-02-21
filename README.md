@@ -4,7 +4,7 @@ A modern, web-based admin dashboard for managing your MantisBase backend. This d
 
 ![MantisBase Admin Dashboard](mantisbase-admin.png)
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [About](#about)
 - [Getting Started](#getting-started)
@@ -14,7 +14,7 @@ A modern, web-based admin dashboard for managing your MantisBase backend. This d
 - [Features](#features)
 - [Links](#links)
 
-## 🎯 About
+## About
 
 MantisBase Admin Dashboard is the official administrative interface for [MantisBase](https://github.com/allankoechke/mantisbase), a lightweight Backend-as-a-Service (BaaS) written in C++. This dashboard allows you to:
 
@@ -25,7 +25,7 @@ MantisBase Admin Dashboard is the official administrative interface for [MantisB
 - Configure application settings
 - And much more!
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -65,7 +65,7 @@ Before you begin, ensure you have the following installed:
 
 2. Log in with your admin credentials at `/mb/login`
 
-## 💻 Development
+## Development
 
 ### Available Scripts
 
@@ -87,8 +87,9 @@ You can customize the development setup using environment variables:
 
 - `MANTIS_PORT` - Port for the MantisBase API (default: 7070)
 - `NEXT_PUBLIC_BASE_PATH` - Base path for the application (default: `/mb` in production)
+- `NEXT_PUBLIC_MB_IS_DEMO_MODE` - Set to `true` or `1` to enable demo mode: prefills login with test credentials and shows a banner that data is cleared every 30 minutes
 
-## 🏗️ Building for Production
+## Building for Production
 
 To build the dashboard for production:
 
@@ -133,7 +134,7 @@ This repository includes a special branch called `mb-admins` that is automatical
 
 This integration ensures that MantisBase always includes the latest stable version of the admin dashboard without requiring manual updates.
 
-## ✨ Features
+## Features
 
 ### Entity Management
 - Create, read, update, and delete database entities
@@ -169,18 +170,14 @@ This integration ensures that MantisBase always includes the latest stable versi
 - **Documentation**: [https://docs.mantisbase.com](https://docs.mantisbase.com)
 - **This Repository**: [https://github.com/allankoechke/mantisbase-admin](https://github.com/allankoechke/mantisbase-admin)
 
-## 📝 Notes
+## Notes
 
 > **Note**: This project is still in active development. Some features may be incomplete or subject to change.
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📄 License
+## License
 
 This project is part of the MantisBase ecosystem. Please refer to the main MantisBase repository for license information.
-
----
-
-**Made with ❤️ for the MantisBase community**

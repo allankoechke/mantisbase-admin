@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, Info } from "lucide-react"
 import { Logo } from "./logo"
 
 import { Button } from "@/components/ui/button"
@@ -11,13 +11,24 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginWithPassword } from "@/lib/api"
 
+const DEMO_EMAIL = "test@test.com"
+const DEMO_PASSWORD = "123456789"
+
+function isDemoMode(): boolean {
+  if (typeof window === "undefined") {
+    return process.env.NEXT_PUBLIC_MB_IS_DEMO_MODE === "true" || process.env.NEXT_PUBLIC_MB_IS_DEMO_MODE === "1"
+  }
+  return process.env.NEXT_PUBLIC_MB_IS_DEMO_MODE === "true" || process.env.NEXT_PUBLIC_MB_IS_DEMO_MODE === "1"
+}
+
 interface LoginFormProps {
   onLogin: (token: string) => void
 }
 
 export function LoginForm({ onLogin }: LoginFormProps) {
-  const [email, setEmail] = React.useState("")
-  const [password, setPassword] = React.useState("")
+  const isDemo = isDemoMode()
+  const [email, setEmail] = React.useState(isDemo ? DEMO_EMAIL : "")
+  const [password, setPassword] = React.useState(isDemo ? DEMO_PASSWORD : "")
   const [showPassword, setShowPassword] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -39,7 +50,16 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex flex-col bg-background">
+      {isDemo && (
+        <Alert className="rounded-none border-x-0 border-t-0 bg-amber-500/10 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200 border-amber-500/30">
+          <Info className="h-4 w-4" />
+          <AlertDescription className="font-medium">
+            This is a demo site. Data is cleared every 30 minutes. Default login: {DEMO_EMAIL} / {DEMO_PASSWORD}
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="flex-1 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
@@ -98,6 +118,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           </form>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }
