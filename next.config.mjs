@@ -4,8 +4,12 @@ const { version } = require('./package.json');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Use basePath in production, or if explicitly set via env var
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/mb' : ''),
+  // Env var overrides for both build and runtime: empty string = no base path
+  basePath: typeof process.env.NEXT_PUBLIC_BASE_PATH !== "undefined"
+    ? process.env.NEXT_PUBLIC_BASE_PATH
+    : process.env.NODE_ENV === "production"
+      ? "/mb"
+      : "",
   env: {
     MANTIS_ADMIN_VERSION: version,
   },

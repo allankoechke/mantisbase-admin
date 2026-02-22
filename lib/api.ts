@@ -68,22 +68,25 @@ export interface Admin {
   updated: string
 }
 
+/** Backend API base URL. Override with NEXT_PUBLIC_MANTIS_BASE_URL (e.g. https://api.example.com) to use an external backend. */
 export function getApiBaseUrl(): string {
+  const override = process.env.NEXT_PUBLIC_MANTIS_BASE_URL
+  if (override !== undefined && override !== "") {
+    return override.replace(/\/+$/, "")
+  }
 
-  const mode = process?.env?.NODE_ENV || "production";
-  const port = process?.env?.MANTIS_PORT || 7070;
+  const mode = process?.env?.NODE_ENV || "production"
+  const port = process?.env?.MANTIS_PORT || 7070
 
   if (mode === "development") {
-    // For debug mode, or non window sessions, pick port from env
-    return `http://localhost:${port}`;
+    return `http://localhost:${port}`
   }
 
   if (typeof window !== "undefined") {
-    const { origin } = window.location;
-    return `${origin}`;
+    return window.location.origin
   }
 
-  return `http://localhost:${port}`;
+  return `http://localhost:${port}`
 }
 
 export interface AppSettings {
