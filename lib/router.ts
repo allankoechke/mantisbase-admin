@@ -17,29 +17,31 @@ const ROUTE_CHANGE_EVENT = "custom-route-change"
 
 let currentRoute: ParsedRoute = { path: "/entities", pathParams: {}, queryParams: {} }
 
-// Get the base path for the application
-// In production, this should be '/mb', in development it might be empty
+// Resolve default base path when env is not set (shared for server and client fallback)
+function getDefaultBasePath(): string {
+  return process.env.NODE_ENV === "production" ? "/mb" : ""
+}
+
+// Get the base path for the application. Env var overrides for both build and runtime; empty string = no base path.
 export function getBasePath(): string {
   if (typeof window === "undefined") {
-    // Server-side: use env var or default to /mb for production
-    return process.env.NEXT_PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/mb' : '')
+    return typeof process.env.NEXT_PUBLIC_BASE_PATH !== "undefined"
+      ? process.env.NEXT_PUBLIC_BASE_PATH
+      : getDefaultBasePath()
   }
-  
-  // Client-side: try to detect base path from current location
-  // If we're at /mb/* or exactly /mb, the base path is /mb
+
+  // Client-side: env var wins when set (including empty string)
+  if (typeof process.env.NEXT_PUBLIC_BASE_PATH !== "undefined") {
+    return process.env.NEXT_PUBLIC_BASE_PATH
+  }
+
+  // Infer from current location when env not set: if we're under /mb, use /mb
   const pathname = window.location.pathname
   if (pathname === "/mb" || pathname.startsWith("/mb/")) {
     return "/mb"
   }
-  
-  // Fallback: check if we're in production mode
-  // In development, base path might be empty
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.NEXT_PUBLIC_BASE_PATH || "/mb"
-  }
-  
-  // Development: no base path
-  return process.env.NEXT_PUBLIC_BASE_PATH || ""
+
+  return getDefaultBasePath()
 }
 
 // Strip base path from a full pathname

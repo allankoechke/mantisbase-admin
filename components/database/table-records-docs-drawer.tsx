@@ -9,6 +9,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { TableMetadata } from "@/lib/api"
+import { getApiBaseUrl } from "@/lib/api"
 
 interface TableDocsDrawerProps {
   table: TableMetadata
@@ -98,7 +99,7 @@ export function TableRecordDocsDrawer({ table, open, onClose }: TableDocsDrawerP
 function RealtimeDocCard({ table }: { table: TableMetadata }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const entityName = table.schema.name
-  const baseUrl = "https://your-api.com"
+  const baseUrl = getApiBaseUrl()
   const sampleRowId = "019c1b81-364b-7000-8120-b5416b2c42c2"
 
   const connectExample = `# Connect to SSE: subscribe to this entity (all rows) and/or a specific row
@@ -244,7 +245,7 @@ function ApiEndpointCard({
   }
 
   const generateRequestExample = () => {
-    const baseUrl = "https://your-api.com"
+    const baseUrl = getApiBaseUrl()
     let example = `curl -X ${method} "${baseUrl}${endpoint}"`
 
     if (method !== "GET") {

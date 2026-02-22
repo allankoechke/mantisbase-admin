@@ -86,7 +86,8 @@ In development mode, the dashboard will:
 You can customize the development setup using environment variables:
 
 - `MANTIS_PORT` - Port for the MantisBase API (default: 7070)
-- `NEXT_PUBLIC_BASE_PATH` - Base path for the application (default: `/mb` in production)
+- `NEXT_PUBLIC_BASE_PATH` - Base path for the app (default: `/mb` in production, empty in dev). Set to empty string for no prefix; overrides at both build and runtime.
+- `NEXT_PUBLIC_MANTIS_BASE_URL` - Backend API base URL. When set (e.g. `https://api.example.com`), all API and login requests use this URL instead of same-origin or localhost. Omit trailing slash.
 - `NEXT_PUBLIC_MB_IS_DEMO_MODE` - Set to `true` or `1` to enable demo mode: prefills login with test credentials and shows a banner that data is cleared every 30 minutes
 
 ## Building for Production

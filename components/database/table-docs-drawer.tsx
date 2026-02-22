@@ -9,6 +9,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { TableMetadata } from "@/lib/api"
+import { getApiBaseUrl } from "@/lib/api"
 
 interface TableDocsDrawerProps {
   open: boolean
@@ -124,7 +125,7 @@ function ApiEndpointCard({
   }
 
   const generateRequestExample = () => {
-    const baseUrl = "{{MANTISBASE_BASE_URL}}"
+    const baseUrl = getApiBaseUrl()
     let example = `curl -X ${method} "${baseUrl}${endpoint}"`
 
     example += ` \\\n  -H "Content-Type: application/json"`
