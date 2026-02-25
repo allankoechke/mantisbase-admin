@@ -1,13 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Search, Table, RefreshCw, Plus, ExternalLink, FileText, Database, MoreHorizontal, Copy, Pencil, Trash2 } from "lucide-react"
+import { Search, Table, RefreshCw, Plus, ExternalLink, FileText, Database, MoreHorizontal, Copy, Pencil, Trash2, User, LayoutDashboard } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   DropdownMenu,
@@ -261,11 +260,13 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                   {searchTerm ? "No entities found matching the search term" : "No entities, add some to get started"}
                 </div>
               ) : (
-                filteredTables.map((table) => (
+                filteredTables.map((table) => {
+                  const TypeIcon = table.schema.type === "auth" ? User : table.schema.type === "view" ? LayoutDashboard : Database
+                  return (
                   <div
                     key={table.id}
                     className={cn(
-                      "group flex items-center gap-1 rounded-lg transition-colors",
+                      "group grid grid-cols-[1fr_auto] items-stretch gap-0 rounded-lg transition-colors pr-2 min-w-0 overflow-hidden",
                       selectedEntityName === table.schema.name && "bg-accent text-accent-foreground"
                     )}
                   >
@@ -273,23 +274,17 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                       type="button"
                       onClick={() => handleEntityClick(table.schema.name)}
                       className={cn(
-                        "flex-1 text-left p-3 rounded-lg transition-colors hover:bg-accent min-w-0",
+                        "min-w-0 text-left p-3 rounded-lg transition-colors hover:bg-accent overflow-hidden",
                         selectedEntityName === table.schema.name && "bg-accent text-accent-foreground"
                       )}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <Table className="h-4 w-4 flex-shrink-0" />
-                          <span className="font-medium truncate">{table.schema.name}</span>
-                        </div>
-                        <Badge
-                          variant={table.schema.type === "auth" ? "default" : table.schema.type === "view" ? "secondary" : "outline"}
-                          className="text-xs flex-shrink-0 ml-2"
-                        >
-                          {table.schema.type}
-                        </Badge>
+                      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                        <TypeIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                        <span className="font-medium truncate block min-w-0" title={table.schema.name}>
+                          {table.schema.name}
+                        </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
                         {table.schema.fields?.length || 0} fields
                       </div>
                     </button>
@@ -298,7 +293,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 flex-shrink-0 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                          className="h-auto self-stretch flex-shrink-0 rounded-lg opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 px-2"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -334,7 +329,8 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                ))
+                  )
+                })
               )}
             </div>
           </ScrollArea>

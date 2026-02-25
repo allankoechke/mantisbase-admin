@@ -400,8 +400,10 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
                         />
                       </TableCell>
                       {filteredFields.map((field) => (
-                        <TableCell key={field.name}>
-                          {renderCellContent(field, row[field.name])}
+                        <TableCell key={field.name} className="max-w-0">
+                          <div className="min-w-0 max-w-full line-clamp-2 break-words overflow-hidden text-ellipsis" title={typeof row[field.name] === "string" ? row[field.name] : undefined}>
+                            {renderCellContent(field, row[field.name])}
+                          </div>
                         </TableCell>
                       ))}
                     </TableRow>
