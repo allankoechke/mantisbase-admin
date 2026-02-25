@@ -33,6 +33,11 @@ interface AddTableDialogProps {
   onTablesUpdate: (tables: TableMetadata[]) => void
   tables?: TableMetadata[] // List of existing tables for foreign key entity selection
   children?: React.ReactNode
+  /** When set, drawer opens in "clone" mode with fields pre-filled from this entity */
+  sourceTable?: TableMetadata | null
+  /** Controlled open state (e.g. for opening from Clone action) */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 interface Field {
@@ -53,13 +58,37 @@ interface Field {
   foreign_key?: ForeignKeyConfig // Optional foreign key configuration
 }
 
-export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], children }: AddTableDialogProps) {
+function tableFieldToField(tf: TableField): Field {
+  return {
+    id: tf.id,
+    name: tf.name,
+    type: tf.type,
+    primary_key: tf.primary_key,
+    nullable: !tf.required,
+    unique: tf.unique ?? false,
+    system: tf.system ?? false,
+    required: tf.required,
+    constraints: tf.constraints ?? {
+      default_value: null,
+      max_value: null,
+      min_value: null,
+      validator: null,
+    },
+    foreign_key: tf.foreign_key,
+  }
+}
+
+export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], children, sourceTable, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AddTableDialogProps) {
+  const [internalOpen, setInternalOpen] = React.useState(false)
+  const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen
+
   const [tableType, setTableType] = React.useState<"base" | "auth" | "view">("base")
   const [tableName, setTableName] = React.useState("")
   const [fields, setFields] = React.useState<Field[]>([])
   const [sqlQuery, setSqlQuery] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(false)
-  const [open, setOpen] = React.useState(false)
   const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null)
   const [expandedFields, setExpandedFields] = React.useState<Set<string>>(new Set())
   const { toast } = useToast()
@@ -67,17 +96,28 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
   // Get unique key for field (use id if exists, otherwise generate one)
   const getFieldKey = (field: Field, index: number) => field.id || `temp-${index}`
 
-  // When drawer opens, reset and add base fields
+  // When drawer opens: either populate from sourceTable (clone) or reset
   React.useEffect(() => {
-    if (open) {
+    if (!open) return
+    setExpandedFields(new Set())
+    setIsLoading(false)
+    if (sourceTable?.schema) {
+      const schema = sourceTable.schema
+      setTableName(`${schema.name}_copy`)
+      setTableType(schema.type)
+      setSqlQuery(schema.sql ?? "")
+      setFields((schema.fields ?? []).map(tableFieldToField))
+    } else {
       setTableName("")
       setSqlQuery("")
-      setIsLoading(false)
       setTableType("base")
-      setExpandedFields(new Set())
-      addBaseFields()
+      setFields([
+        { id: "mbf_14258576900392064537", name: "id", type: "string", primary_key: true, nullable: false, system: true, required: true, unique: false, constraints: { min_value: 6, max_value: null, default_value: null, validator: "@password" } },
+        { id: "mbf_13735287961322938256", name: "created", type: "date", primary_key: false, nullable: false, system: true, required: true, unique: false, constraints: { min_value: null, max_value: null, default_value: null, validator: null } },
+        { id: "mbf_9124719522053273721", name: "updated", type: "date", primary_key: false, nullable: false, system: true, required: true, unique: false, constraints: { min_value: null, max_value: null, default_value: null, validator: null } },
+      ])
     }
-  }, [open])
+  }, [open, sourceTable?.id])
 
   function addBaseFields() {
     if (tableType === "view") {
@@ -192,11 +232,12 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
     }
   }
 
+  // When user changes entity type in the form, reset fields (but not when opening for clone)
   React.useEffect(() => {
-    if (open) {
+    if (open && !sourceTable) {
       addBaseFields()
     }
-  }, [tableType, open])
+  }, [tableType, open, sourceTable?.id])
 
   const addField = () => {
     setFields([
@@ -448,14 +489,16 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        {children || (
-          <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Table
-          </Button>
-        )}
-      </DrawerTrigger>
+      {!isControlled && (
+        <DrawerTrigger asChild>
+          {children || (
+            <Button size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Table
+            </Button>
+          )}
+        </DrawerTrigger>
+      )}
       <DrawerContent side="right" className="w-full sm:w-[600px]">
         <DrawerHeader>
           <DrawerTitle>Create New Entity</DrawerTitle>

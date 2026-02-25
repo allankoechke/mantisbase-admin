@@ -1,17 +1,40 @@
 "use client"
 
 import * as React from "react"
-import { Search, Table, RefreshCw, Plus, ExternalLink, FileText, Database } from "lucide-react"
+import { Search, Table, RefreshCw, Plus, ExternalLink, FileText, Database, MoreHorizontal, Copy, Pencil, Trash2, User, LayoutDashboard } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import type { ApiClient, TableMetadata } from "@/lib/api"
 import { AddTableDialog } from "./add-table-dialog"
 import { TableDetailView } from "./table-detail-view"
-import { SidebarTrigger } from "@/components/ui/sidebar"
 import { TableDocsDrawer } from "./table-docs-drawer"
 import { useRouter } from "@/lib/router"
 import { useToast } from "@/hooks/use-toast"
@@ -26,7 +49,7 @@ interface DatabaseSectionProps {
 export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseSectionProps) {
   const { route, navigate } = useRouter()
   const { toast } = useToast()
-  
+
   // Initialize search term from query params
   const initialFilter = route.queryParams.filter || ""
   const [searchTerm, setSearchTerm] = React.useState(initialFilter)
@@ -34,6 +57,19 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   const [searchExpanded, setSearchExpanded] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [docsOpen, setDocsOpen] = React.useState(false)
+
+  // Clone: open create-entity drawer with schema pre-filled
+  const [addDrawerOpen, setAddDrawerOpen] = React.useState(false)
+  const [cloneSourceTable, setCloneSourceTable] = React.useState<TableMetadata | null>(null)
+
+  // Rename entity dialog
+  const [renameTable, setRenameTable] = React.useState<TableMetadata | null>(null)
+  const [renameNewName, setRenameNewName] = React.useState("")
+  const [isRenaming, setIsRenaming] = React.useState(false)
+
+  // Delete entity confirmation
+  const [deleteTable, setDeleteTable] = React.useState<TableMetadata | null>(null)
+  const [isDeleting, setIsDeleting] = React.useState(false)
 
   // Sync search term with query params
   React.useEffect(() => {
@@ -65,41 +101,80 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table?.schema?.name?.toLowerCase().includes(searchTerm.toLowerCase())) : []
 
   const handleDeleteTable = async (tableId: string) => {
+    setIsDeleting(true)
     try {
       const res: any = await apiClient.call(`/api/v1/schemas/${tableId}`, { method: "DELETE" })
-
-      // If the request failed, throw the error here 
       if (res?.error?.length > 0) throw res.error
 
-      // Fetch new tables
       const response: any = await apiClient.call("/api/v1/schemas")
-
-      // If the request failed, throw the error here 
       if (response?.error?.length > 0) throw response.error
 
-      // Handle different response structures
       let updatedTables: TableMetadata[] = []
       if (Array.isArray(response)) {
         updatedTables = response
       } else if (response?.data && Array.isArray(response.data)) {
         updatedTables = response.data
       }
-
-      // Set the new tables
       onTablesUpdate(updatedTables)
-
+      setDeleteTable(null)
       toast({
-        title: "Table Deleted",
-        description: "Table deleted successfully!",
+        title: "Entity deleted",
+        description: "The entity has been deleted successfully.",
         duration: 3000,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to delete table:", error)
-      // toast({
-      //   title: "Error Deleted",
-      //   description: "Table deleted successfully!",
-      //   duration: 3000,
-      // })
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete entity",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleRenameSubmit = async () => {
+    if (!renameTable || !renameNewName.trim()) return
+    const trimmed = renameNewName.trim()
+    if (trimmed === renameTable.schema.name) {
+      setRenameTable(null)
+      setRenameNewName("")
+      return
+    }
+    setIsRenaming(true)
+    try {
+      const res: any = await apiClient.call(`/api/v1/schemas/${renameTable.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (res?.error?.length > 0) throw res.error
+
+      const response: any = await apiClient.call("/api/v1/schemas")
+      if (response?.error?.length > 0) throw response.error
+
+      let updatedTables: TableMetadata[] = []
+      if (Array.isArray(response)) {
+        updatedTables = response
+      } else if (response?.data && Array.isArray(response.data)) {
+        updatedTables = response.data
+      }
+      onTablesUpdate(updatedTables)
+      setRenameTable(null)
+      setRenameNewName("")
+      toast({
+        title: "Entity renamed",
+        description: `Renamed to "${trimmed}".`,
+      })
+    } catch (error: unknown) {
+      console.error("Failed to rename entity:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to rename entity",
+      })
+    } finally {
+      setIsRenaming(false)
     }
   }
 
@@ -185,32 +260,77 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
                   {searchTerm ? "No entities found matching the search term" : "No entities, add some to get started"}
                 </div>
               ) : (
-                filteredTables.map((table) => (
-                  <button
+                filteredTables.map((table) => {
+                  const TypeIcon = table.schema.type === "auth" ? User : table.schema.type === "view" ? LayoutDashboard : Database
+                  return (
+                  <div
                     key={table.id}
-                    onClick={() => handleEntityClick(table.schema.name)}
                     className={cn(
-                      "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent",
+                      "group grid grid-cols-[1fr_auto] items-stretch gap-0 rounded-lg transition-colors pr-2 min-w-0 overflow-hidden",
                       selectedEntityName === table.schema.name && "bg-accent text-accent-foreground"
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Table className="h-4 w-4 flex-shrink-0" />
-                        <span className="font-medium truncate">{table.schema.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleEntityClick(table.schema.name)}
+                      className={cn(
+                        "min-w-0 text-left p-3 rounded-lg transition-colors hover:bg-accent overflow-hidden",
+                        selectedEntityName === table.schema.name && "bg-accent text-accent-foreground"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                        <TypeIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                        <span className="font-medium truncate block min-w-0" title={table.schema.name}>
+                          {table.schema.name}
+                        </span>
                       </div>
-                      <Badge
-                        variant={table.schema.type === "auth" ? "default" : table.schema.type === "view" ? "secondary" : "outline"}
-                        className="text-xs flex-shrink-0 ml-2"
-                      >
-                        {table.schema.type}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {table.schema.fields?.length || 0} fields
-                    </div>
-                  </button>
-                ))
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
+                        {table.schema.fields?.length || 0} fields
+                      </div>
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-auto self-stretch flex-shrink-0 rounded-lg opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 px-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Entity actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setCloneSourceTable(table)
+                            setAddDrawerOpen(true)
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Clone
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setRenameTable(table)
+                            setRenameNewName(table.schema.name)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeleteTable(table)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  )
+                })
               )}
             </div>
           </ScrollArea>
@@ -278,6 +398,73 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
 
       {/* Entity Schema API Documentation */}
       <TableDocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
+
+      {/* Clone entity: create drawer with schema pre-filled */}
+      <AddTableDialog
+        apiClient={apiClient}
+        onTablesUpdate={onTablesUpdate}
+        tables={tables}
+        open={addDrawerOpen}
+        onOpenChange={(open) => {
+          setAddDrawerOpen(open)
+          if (!open) setCloneSourceTable(null)
+        }}
+        sourceTable={cloneSourceTable}
+      />
+
+      {/* Rename entity dialog */}
+      <Dialog open={!!renameTable} onOpenChange={(open) => { if (!open) { setRenameTable(null); setRenameNewName("") } }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Rename entity</DialogTitle>
+            <DialogDescription>
+              Enter a new name for the entity. This does not affect existing data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="rename-entity-name">New name</Label>
+              <Input
+                id="rename-entity-name"
+                value={renameNewName}
+                onChange={(e) => setRenameNewName(e.target.value)}
+                placeholder="Entity name"
+                onKeyDown={(e) => e.key === "Enter" && handleRenameSubmit()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRenameTable(null); setRenameNewName("") }}>
+              Cancel
+            </Button>
+            <Button onClick={handleRenameSubmit} disabled={!renameNewName.trim() || isRenaming}>
+              {isRenaming ? "Renaming..." : "Rename"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete entity confirmation */}
+      <AlertDialog open={!!deleteTable} onOpenChange={(open) => { if (!open) setDeleteTable(null) }}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete entity</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the entity <strong>"{deleteTable?.schema.name}"</strong>? This action cannot be undone and will permanently delete all data associated with this entity.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTable && handleDeleteTable(deleteTable.id)}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
