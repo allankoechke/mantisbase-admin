@@ -212,12 +212,14 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
   const filteredFields = table.schema.fields?.filter((field) => visibleColumns.includes(field.name)) || []
 
   function renderCellContent(field: { name: string; type: string }, value: any) {
-    if (value === null) return "N/A";
+    if (value === null || value === undefined) {
+      return "N/A"
+    }
 
     switch (field.type) {
       case "bool":
       case "boolean":
-        return value ? "true" : "false";
+        return value === true || value === "true" || value === 1 ? "true" : "false"
 
       case "json":
         try {
@@ -232,7 +234,9 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
 
       case "file":
       case "files": {
-        if(!value || value==="" || value.length === 0) return "N/A";
+        if (value === "" || (Array.isArray(value) && value.length === 0)) {
+          return "N/A"
+        }
 
         const filenames = Array.isArray(value) ? value : [value];
         return (
@@ -267,7 +271,10 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
       }
 
       default:
-        return value ? String(value) : "N/A";
+        if (typeof value === "number" && Number.isNaN(value)) {
+          return "N/A"
+        }
+        return String(value)
     }
   }
 
@@ -372,7 +379,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
                     />
                   </TableHead>
                   {filteredFields.map((field) => (
-                    <TableHead key={field.name} className="capitalize">
+                    <TableHead key={field.name}>
                       {field.name}
                     </TableHead>
                   ))}

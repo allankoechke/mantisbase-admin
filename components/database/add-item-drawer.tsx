@@ -24,12 +24,14 @@ import { useToast } from "@/hooks/use-toast"
 interface EditItemDrawerProps {
   table: TableMetadata
   apiClient: ApiClient
+  /** When set, POST goes here instead of `/api/v1/entities/{schema.name}` (e.g. system admin API). */
+  entityCollectionPath?: string
   open: boolean
   onClose: () => void
   onItemAdded: (item: any) => void
 }
 
-export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: EditItemDrawerProps) {
+export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, onClose, onItemAdded }: EditItemDrawerProps) {
   const [tableFields, setTableFields] = React.useState<any>([])
   const [formData, setFormData] = React.useState<any>({})
   const [isLoading, setIsLoading] = React.useState(false)
@@ -120,7 +122,8 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
     setIsLoading(true)
     try {
       const body = prepareRequestBody(formData, tableFields);
-      const createdItem = await apiClient.call<any>(`/api/v1/entities/${table.schema.name}`, {
+      const collectionUrl = entityCollectionPath ?? `/api/v1/entities/${table.schema.name}`
+      const createdItem = await apiClient.call<any>(collectionUrl, {
         method: "POST",
         body: body,
       })
@@ -242,10 +245,12 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
     }
   }
 
-  function formatDateForInput(value: string | Date | undefined): string {
-    if (!value) return "";
+  function formatDateForInput(value: string | Date | number | undefined): string {
+    if (value === null || value === undefined || value === "") {
+      return ""
+    }
 
-    const date = typeof value === "string" ? new Date(value) : value;
+    const date = typeof value === "string" || typeof value === "number" ? new Date(value) : value
     if (isNaN(date.getTime())) return "";
 
     return date.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:MM"
@@ -290,7 +295,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                 
                 return (
                 <div key={field.name} className="space-y-2">
-                  <Label htmlFor={field.name} className="text-sm font-medium capitalize">
+                  <Label htmlFor={field.name} className="text-sm font-medium">
                     {field.name}
                     {(field.required || field.system) && <span className="text-red-500 ml-1">*</span>}
                   </Label>
@@ -328,7 +333,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                         onCheckedChange={(checked: any) => handleFieldChange(field.name, checked)}
                         disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       />
-                      <span>{formData[field.name] ? "True" : "False"}</span>
+                      <span>{formData[field.name] === true ? "True" : "False"}</span>
                     </div>
                   ) : field.type === "file" ? (
                     <Input
@@ -351,7 +356,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                     <Input
                       id={field.name}
                       type="number"
-                      value={formData[field.name] || ""}
+                      value={formData[field.name] ?? ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}
@@ -361,7 +366,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                     <Input
                       id={field.name}
                       type="password"
-                      value={formData[field.name] || ""}
+                      value={formData[field.name] ?? ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}
@@ -384,7 +389,7 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
                     <Input
                       id={field.name}
                       type="text"
-                      value={formData[field.name] || ""}
+                      value={formData[field.name] ?? ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}

@@ -176,9 +176,9 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
     for (const [key, value] of Object.entries(data)) {
       const field = tableFields.find(f => f.name === key);
       if (!field) continue;
-      if (!value) {
+      if (value === null || value === undefined) {
         formData.append(key, "");
-        continue; 
+        continue;
       }
 
       if (field.type === "file") {
@@ -186,10 +186,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
           formData.append(key, value);
         }
       } else if (field.type === "files") {
-        if (!value) {
-          formData.append(key, value);
-        }
-        else if (Array.isArray(value)) {
+        if (Array.isArray(value)) {
           var files = value.filter(v => v instanceof File);
           var arr = value.filter(v => !(v instanceof File));
           files.forEach((file, idx) => {
@@ -264,8 +261,13 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
     if (field.foreign_key && field.foreign_key.entity && field.foreign_key.field) {
       return value === "null" ? null : value;
     }
-    
-    if (!value) return null; // handle null or undefined values
+
+    if (value === null || value === undefined) {
+      return null
+    }
+    if (value === "") {
+      return null
+    }
 
     const type = field.type;
 
@@ -347,10 +349,12 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
     handleFieldChange(fieldName, updated);
   };
 
-  function formatDateForInput(value: string | Date | undefined): string {
-    if (!value) return "";
+  function formatDateForInput(value: string | Date | number | undefined): string {
+    if (value === null || value === undefined || value === "") {
+      return ""
+    }
 
-    const date = typeof value === "string" ? new Date(value) : value;
+    const date = typeof value === "string" || typeof value === "number" ? new Date(value) : value
     if (isNaN(date.getTime())) return "";
 
     return date.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:MM"
@@ -385,7 +389,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
 
                 return (
                   <div key={field.name} className="space-y-2">
-                    <Label htmlFor={field.name} className="text-sm font-medium capitalize">
+                    <Label htmlFor={field.name} className="text-sm font-medium">
                       {field.name}
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </Label>
@@ -434,13 +438,13 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                           onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
                           disabled={isDisabled}
                         />
-                        <span>{formData[field.name] ? "True" : "False"}</span>
+                        <span>{formData[field.name] === true ? "True" : "False"}</span>
                       </div>
                     ) : field.type === "date" || field.type === "datetime" || field.type === "timestamp" ? (
                       <Input
                         id={field.name}
                         type="datetime-local"
-                        value={value ? formatDateForInput(value) : ""}
+                        value={value !== null && value !== undefined ? formatDateForInput(value) : ""}
                         onChange={(e) => handleFieldChange(field.name, e.target.value)}
                         disabled={isDisabled}
                         className={`w-full ${isDisabled ? "bg-muted" : ""}`}

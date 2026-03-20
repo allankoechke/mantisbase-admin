@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import type { ApiClient, Admin } from "@/lib/api"
+import { SYS_ADMINS_API, type ApiClient, type Admin } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 interface ChangePasswordDialogProps {
@@ -38,7 +38,7 @@ export function ChangePasswordDialog({ admin, apiClient, onClose }: ChangePasswo
     setError("")
 
     try {
-      const res: any = await apiClient.call(`/api/v1/entities/mb_admins/${admin.id}`, {
+      const res: any = await apiClient.call(`${SYS_ADMINS_API}/${admin.id}`, {
         method: "PATCH",
         body: JSON.stringify({ password: newPassword }),
       })

@@ -26,7 +26,7 @@ import type { ApiClient, TableMetadata, TableField, ForeignKeyConfig } from "@/l
 import { dataTypes } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { fi } from "date-fns/locale"
+import { formatConstraintDefaultForInput, normalizeConstraintsForFieldType } from "@/lib/schema-constraints"
 
 interface AddTableDialogProps {
   apiClient: ApiClient
@@ -383,38 +383,41 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
       // Include all fields in order (system + valid user fields) for base/auth types
       // For view types, fields are typically empty or derived from SQL
       // Filter out non-system fields that don't have valid name and type
-      const allFields = tableType === "view"
-        ? []
-        : fields
-          .filter((field) => {
-            // Keep all system fields
-            if (field.system) return true
-            // For non-system fields, only keep those with valid name and type
-            return field.name.trim() && field.type && field.type.trim()
-          })
-          .map(
-            (field): TableField => {
-              const fieldData: any = {
-                name: field.name,
-                type: field.type,
-                primary_key: field.primary_key,
-                required: field.required,
-                unique: field.unique || false,
-                system: field.system || false,
-                constraints: field.constraints,
-              }
-              // Only include id if it exists (for existing fields being updated)
-              if (field.id && field.id.startsWith("mbf_")) {
-                fieldData.id = field.id
-              }
-              // Include foreign_key if configured
-              if (field.foreign_key && field.foreign_key.entity && field.foreign_key.field) {
-                fieldData.foreign_key = field.foreign_key
-              }
-
-              return fieldData
-            },
-          )
+      const allFields: TableField[] = []
+      if (tableType !== "view") {
+        const candidateFields = fields.filter((field) => {
+          if (field.system) return true
+          return field.name.trim() && field.type && field.type.trim()
+        })
+        for (const field of candidateFields) {
+          const normalized = normalizeConstraintsForFieldType(field.type, field.constraints)
+          if (!normalized.ok) {
+            toast({
+              variant: "destructive",
+              title: "Invalid constraints",
+              description: `${field.name || "Field"}: ${normalized.message}`,
+            })
+            setIsLoading(false)
+            return
+          }
+          const fieldData: any = {
+            name: field.name,
+            type: field.type,
+            primary_key: field.primary_key,
+            required: field.required,
+            unique: field.unique || false,
+            system: field.system || false,
+            constraints: normalized.constraints,
+          }
+          if (field.id && field.id.startsWith("mbf_")) {
+            fieldData.id = field.id
+          }
+          if (field.foreign_key && field.foreign_key.entity && field.foreign_key.field) {
+            fieldData.foreign_key = field.foreign_key
+          }
+          allFields.push(fieldData)
+        }
+      }
 
       const tableData: any = {
         name: tableName,
@@ -691,7 +694,11 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
                                     id={`min-${fieldKey}`}
                                     type="number"
                                     placeholder="Min"
-                                    value={field.constraints.min_value || ""}
+                                    value={
+                                      field.constraints.min_value === null || field.constraints.min_value === undefined
+                                        ? ""
+                                        : String(field.constraints.min_value)
+                                    }
                                     onChange={(e) =>
                                       updateField(fieldKey, {
                                         constraints: {
@@ -711,7 +718,11 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
                                     id={`max-${fieldKey}`}
                                     type="number"
                                     placeholder="Max"
-                                    value={field.constraints.max_value || ""}
+                                    value={
+                                      field.constraints.max_value === null || field.constraints.max_value === undefined
+                                        ? ""
+                                        : String(field.constraints.max_value)
+                                    }
                                     onChange={(e) =>
                                       updateField(fieldKey, {
                                         constraints: {
@@ -731,8 +742,12 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
                                 <Input
                                   id={`default-${fieldKey}`}
                                   placeholder="Default value"
-                                  value={field.constraints.default_value || ""}
-                                  onChange={(e) => updateField(fieldKey, { constraints: { ...field.constraints, default_value: e.target.value || null } })}
+                                  value={formatConstraintDefaultForInput(field.type, field.constraints.default_value)}
+                                  onChange={(e) =>
+                                    updateField(fieldKey, {
+                                      constraints: { ...field.constraints, default_value: e.target.value },
+                                    })
+                                  }
                                   className="h-8 text-xs"
                                 />
                               </div>

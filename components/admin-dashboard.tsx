@@ -31,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiClient, type TableMetadata, type Admin, type AppSettings } from "@/lib/api"
+import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin, type AppSettings } from "@/lib/api"
 import { DatabaseSection } from "./database/database-section"
 import { AdminsSection } from "./admins/admins-section"
 import { SettingsSection } from "./settings/settings-section"
@@ -117,7 +117,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     if (!apiClient) return
     
     try {
-      const adminsData = await apiClient.call<any>("/api/v1/entities/mb_admins")
+      const adminsData = await apiClient.call<any>(`${SYS_ADMINS_API}`)
       
       // Ensure adminsData is an array - handle paginated response
       let adminsArray: Admin[] = []
