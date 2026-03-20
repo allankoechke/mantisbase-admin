@@ -389,7 +389,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
 
                 return (
                   <div key={field.name} className="space-y-2">
-                    <Label htmlFor={field.name} className="text-sm font-medium capitalize">
+                    <Label htmlFor={field.name} className="text-sm font-medium">
                       {field.name}
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </Label>

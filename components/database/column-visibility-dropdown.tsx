@@ -65,7 +65,7 @@ export function ColumnVisibilityDropdown({ table, visibleColumns, onVisibilityCh
             onCheckedChange={() => toggleColumn(field.name)}
             disabled={field.name === "id"} // Always keep ID visible
           >
-            <span className="capitalize">{field.name}</span>
+            <span>{field.name}</span>
             {field.name === "id" && <span className="text-xs text-muted-foreground ml-2">(required)</span>}
           </DropdownMenuCheckboxItem>
         ))}

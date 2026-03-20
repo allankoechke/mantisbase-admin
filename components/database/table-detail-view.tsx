@@ -379,7 +379,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
                     />
                   </TableHead>
                   {filteredFields.map((field) => (
-                    <TableHead key={field.name} className="capitalize">
+                    <TableHead key={field.name}>
                       {field.name}
                     </TableHead>
                   ))}
