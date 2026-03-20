@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog } from "@/components/ui/dialog"
-import type { ApiClient, Admin, TableMetadata } from "@/lib/api"
+import { SYS_ADMINS_API, type ApiClient, type Admin, type TableMetadata } from "@/lib/api"
 import { ChangePasswordDialog } from "./change-password-dialog"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { AddItemDrawer } from "../database/add-item-drawer"
@@ -141,12 +141,12 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
 
   const handleDeleteAdmin = async (adminId: string) => {
     try {
-      const res: any = await apiClient.call(`/api/v1/entities/mb_admins/${adminId}`, { method: "DELETE" })
+      const res: any = await apiClient.call(`${SYS_ADMINS_API}/${adminId}`, { method: "DELETE" })
 
       // If the request failed, throw the error here 
       if (res?.error?.length > 0) throw res.error
 
-      const response: any = await apiClient.call("/api/v1/entities/mb_admins")
+      const response: any = await apiClient.call(SYS_ADMINS_API)
 
       // If the request failed, throw the error here 
       if (response?.error?.length > 0) throw response.error
@@ -190,7 +190,7 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
   const handleReload = async () => {
     try {
       setIsLoading(true)
-      const response: any = await apiClient.call("/api/v1/entities/mb_admins")
+      const response: any = await apiClient.call(SYS_ADMINS_API)
       
       // Handle paginated response structure: { items: [...], items_count, page, page_size, total_count }
       let updatedAdmins: Admin[] = []
@@ -289,6 +289,7 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
         <AddItemDrawer
           table={table}
           apiClient={apiClient}
+          entityCollectionPath={SYS_ADMINS_API}
           open={!!addingAdmin}
           onClose={() => setAddingAdmin(false)}
           onItemAdded={handleAdminAdded}

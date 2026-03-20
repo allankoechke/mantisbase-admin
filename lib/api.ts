@@ -68,6 +68,9 @@ export interface Admin {
   updated: string
 }
 
+/** System admin REST API (list, CRUD). Login: `${SYS_ADMINS_API}/login`. */
+export const SYS_ADMINS_API = "/api/v1/sys/admins" as const
+
 /** Backend API base URL. Override with NEXT_PUBLIC_MANTIS_BASE_URL (e.g. https://api.example.com) to use an external backend. */
 export function getApiBaseUrl(): string {
   const override = process.env.NEXT_PUBLIC_MANTIS_BASE_URL
@@ -234,15 +237,13 @@ export async function loginWithPassword(
   email: string,
   password: string
 ): Promise<LoginResponse> {
-  // Real API call to /api/v1/auth/login
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/login`, {
+    const response = await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         identity: email,
         password: password,
-        entity: "mb_admins"
       }),
     })
 

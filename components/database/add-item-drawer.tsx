@@ -24,12 +24,14 @@ import { useToast } from "@/hooks/use-toast"
 interface EditItemDrawerProps {
   table: TableMetadata
   apiClient: ApiClient
+  /** When set, POST goes here instead of `/api/v1/entities/{schema.name}` (e.g. system admin API). */
+  entityCollectionPath?: string
   open: boolean
   onClose: () => void
   onItemAdded: (item: any) => void
 }
 
-export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: EditItemDrawerProps) {
+export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, onClose, onItemAdded }: EditItemDrawerProps) {
   const [tableFields, setTableFields] = React.useState<any>([])
   const [formData, setFormData] = React.useState<any>({})
   const [isLoading, setIsLoading] = React.useState(false)
@@ -120,7 +122,8 @@ export function AddItemDrawer({ table, apiClient, open, onClose, onItemAdded }: 
     setIsLoading(true)
     try {
       const body = prepareRequestBody(formData, tableFields);
-      const createdItem = await apiClient.call<any>(`/api/v1/entities/${table.schema.name}`, {
+      const collectionUrl = entityCollectionPath ?? `/api/v1/entities/${table.schema.name}`
+      const createdItem = await apiClient.call<any>(collectionUrl, {
         method: "POST",
         body: body,
       })
