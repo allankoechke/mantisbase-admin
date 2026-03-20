@@ -245,10 +245,12 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
     }
   }
 
-  function formatDateForInput(value: string | Date | undefined): string {
-    if (!value) return "";
+  function formatDateForInput(value: string | Date | number | undefined): string {
+    if (value === null || value === undefined || value === "") {
+      return ""
+    }
 
-    const date = typeof value === "string" ? new Date(value) : value;
+    const date = typeof value === "string" || typeof value === "number" ? new Date(value) : value
     if (isNaN(date.getTime())) return "";
 
     return date.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:MM"
@@ -331,7 +333,7 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                         onCheckedChange={(checked: any) => handleFieldChange(field.name, checked)}
                         disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       />
-                      <span>{formData[field.name] ? "True" : "False"}</span>
+                      <span>{formData[field.name] === true ? "True" : "False"}</span>
                     </div>
                   ) : field.type === "file" ? (
                     <Input
@@ -354,7 +356,7 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                     <Input
                       id={field.name}
                       type="number"
-                      value={formData[field.name] || ""}
+                      value={formData[field.name] ?? ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}
@@ -364,7 +366,7 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                     <Input
                       id={field.name}
                       type="password"
-                      value={formData[field.name] || ""}
+                      value={formData[field.name] ?? ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}
@@ -387,7 +389,7 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                     <Input
                       id={field.name}
                       type="text"
-                      value={formData[field.name] || ""}
+                      value={formData[field.name] ?? ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       disabled={(field.type === "view" || isSystemGeneratedField(field))}
                       className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}

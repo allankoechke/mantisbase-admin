@@ -38,6 +38,7 @@ import { useRouter } from "@/lib/router"
 
 
 import { cn } from "@/lib/utils"
+import { formatConstraintDefaultForInput, normalizeConstraintsForFieldType } from "@/lib/schema-constraints"
 
 interface TableConfigDrawerProps {
   table: TableMetadata
@@ -223,7 +224,26 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
     setIsLoading(true)
     try {
       // Transform UI format (camelCase flat) to API format (with constraints and snake_case)
-      const transformedFields = columns.map((col: any) => {
+      const transformedFields: any[] = []
+      for (const col of columns) {
+        const rawConstraints = {
+          default_value: col.defaultValue !== undefined ? col.defaultValue : col.constraints?.default_value,
+          min_value: col.minValue !== undefined ? col.minValue : col.constraints?.min_value,
+          max_value: col.maxValue !== undefined ? col.maxValue : col.constraints?.max_value,
+          validator:
+            col.validator !== undefined ? col.validator : (col.constraints?.validator ?? null),
+        }
+        const normalized = normalizeConstraintsForFieldType(col.type, rawConstraints)
+        if (!normalized.ok) {
+          toast({
+            variant: "destructive",
+            title: "Invalid constraints",
+            description: `${col.name || "Field"}: ${normalized.message}`,
+            duration: 5000,
+          })
+          setIsLoading(false)
+          return
+        }
         const fieldData: any = {
           id: col.id,
           name: col.name,
@@ -232,20 +252,14 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           required: col.required,
           system: col.system || false,
           unique: col.unique || false,
-          constraints: {
-            default_value: col.defaultValue !== undefined ? col.defaultValue : (col.constraints?.default_value || null),
-            max_value: col.maxValue !== undefined ? col.maxValue : (col.constraints?.max_value || null),
-            min_value: col.minValue !== undefined ? col.minValue : (col.constraints?.min_value || null),
-            validator: col.validator !== undefined ? col.validator : (col.constraints?.validator || null),
-          },
+          constraints: normalized.constraints,
           ...(col.old_name && { old_name: col.old_name }),
         }
-        // Include foreign_key if configured
         if (col.foreign_key && col.foreign_key.entity && col.foreign_key.field) {
           fieldData.foreign_key = col.foreign_key
         }
-        return fieldData
-      })
+        transformedFields.push(fieldData)
+      }
       
       // Add deleted fields to the fields array with op: "delete"
       const deletedFields = deletedColumns.map((fieldId: string) => ({
@@ -581,7 +595,11 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                         id={`min-${fieldKey}`}
                                         type="number"
                                         placeholder="Min"
-                                        value={column.minValue || ""}
+                                        value={
+                                          column.minValue === null || column.minValue === undefined
+                                            ? ""
+                                            : String(column.minValue)
+                                        }
                                         onChange={(e) =>
                                           updateColumn(index, "minValue", e.target.value ? Number.parseFloat(e.target.value) : null)
                                         }
@@ -596,7 +614,11 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                         id={`max-${fieldKey}`}
                                         type="number"
                                         placeholder="Max"
-                                        value={column.maxValue || ""}
+                                        value={
+                                          column.maxValue === null || column.maxValue === undefined
+                                            ? ""
+                                            : String(column.maxValue)
+                                        }
                                         onChange={(e) =>
                                           updateColumn(index, "maxValue", e.target.value ? Number.parseFloat(e.target.value) : null)
                                         }
@@ -611,8 +633,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                     <Input
                                       id={`default-${fieldKey}`}
                                       placeholder="Default value"
-                                      value={column.defaultValue || ""}
-                                      onChange={(e) => updateColumn(index, "defaultValue", e.target.value || null)}
+                                      value={formatConstraintDefaultForInput(column.type, column.defaultValue ?? column.constraints?.default_value)}
+                                      onChange={(e) => updateColumn(index, "defaultValue", e.target.value)}
                                       className="h-8 text-xs"
                                     />
                                   </div>
