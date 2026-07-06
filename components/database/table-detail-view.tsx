@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { ApiClient, TableMetadata, getApiBaseUrl } from "@/lib/api"
+import { ApiClient, TableMetadata, entityFileUrl } from "@/lib/api"
 import { TableConfigDrawer } from "./table-config-drawer"
 import { TableRecordDocsDrawer } from "./table-records-docs-drawer"
 import { EditItemDrawer } from "./edit-item-drawer"
@@ -242,7 +242,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
         return (
           <div className="flex gap-2 flex-wrap">
             {filenames.map((filename: string, i: number) => {
-              const url = `${getApiBaseUrl()}/api/files/${table.schema.name}/${encodeURIComponent(filename)}`;
+              const url = entityFileUrl(table.schema.name, filename);
               const ext = filename.split(".").pop()?.toLowerCase() || "";
 
               const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);

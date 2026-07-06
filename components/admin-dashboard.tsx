@@ -31,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin, type AppSettings } from "@/lib/api"
+import { ApiClient, SYS_ADMINS_API, SYS_SETTINGS_API, type TableMetadata, type Admin, type AppSettings } from "@/lib/api"
 import { DatabaseSection } from "./database/database-section"
 import { AdminsSection } from "./admins/admins-section"
 import { SettingsSection } from "./settings/settings-section"
@@ -148,8 +148,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }, [route.path, loadAdmins])
 
   const loadData = async () => {
-    // Set default settings if loading fails
-    setSettings({
+    const defaultSettings: AppSettings = {
       appName: "ACME Mantis Project",
       baseUrl: "http://127.0.0.1:7070",
       mantisVersion: "0.0.0",
@@ -160,13 +159,16 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       sessionTimeout: 84000,
       adminSessionTimeout: 3600,
       mode: mode,
-    })
+    }
+    setSettings(defaultSettings)
 
     try {
       setLoading(true)
 
-      // Only load tables on initial load
-      const tablesData = await apiClient.call<any>("/api/v1/schemas")
+      const [tablesData, settingsData] = await Promise.all([
+        apiClient.call<any>("/api/v1/schemas"),
+        apiClient.call<AppSettings>(SYS_SETTINGS_API).catch(() => null),
+      ])
 
       // Ensure tablesData is an array - handle different response structures
       let tablesArray: TableMetadata[] = []
@@ -177,6 +179,10 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       }
 
       setTables(tablesArray)
+
+      if (settingsData && !settingsData?.error) {
+        setSettings({ ...settingsData, mode })
+      }
     } catch (error) {
       console.error("Failed to load data:", error)
     } finally {

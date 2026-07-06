@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ApiClient } from "@/lib/api"
+import { ApiClient, SYS_ADMINS_SETUP_API } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { useToast } from "@/hooks/use-toast"
 
@@ -57,7 +57,7 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
 
     try {
       // Create admin account using the setup token
-      const response: any = await apiClient.call("/api/v1/auth/setup/admin", {
+      const response: any = await apiClient.call(SYS_ADMINS_SETUP_API, {
         method: "POST",
         body: JSON.stringify({
           email,

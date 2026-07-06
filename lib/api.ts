@@ -71,6 +71,17 @@ export interface Admin {
 /** System admin REST API (list, CRUD). Login: `${SYS_ADMINS_API}/login`. */
 export const SYS_ADMINS_API = "/api/v1/sys/admins" as const
 
+/** Initial admin setup (one-time, requires setup token). */
+export const SYS_ADMINS_SETUP_API = "/api/v1/sys/admins/setup" as const
+
+/** System settings config endpoint. */
+export const SYS_SETTINGS_API = "/api/v1/sys/settings/config" as const
+
+/** Build a file download URL for an entity record attachment. */
+export function entityFileUrl(entity: string, filename: string): string {
+  return `${getApiBaseUrl()}/api/v1/files/${entity}/${encodeURIComponent(filename)}`
+}
+
 /** Backend API base URL. Override with NEXT_PUBLIC_MANTIS_BASE_URL (e.g. https://api.example.com) to use an external backend. */
 export function getApiBaseUrl(): string {
   const override = process.env.NEXT_PUBLIC_MANTIS_BASE_URL
