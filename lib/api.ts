@@ -96,6 +96,16 @@ export interface AdminApiKeyCreateRequest {
   expires_at?: string
 }
 
+export interface ApiKeyUser {
+  id: string
+  label: string
+}
+
+/** Entity auth user API keys (list, create, revoke). */
+export function entityApiKeysApi(entityName: string): string {
+  return `/api/v1/auth/${encodeURIComponent(entityName)}/api-keys`
+}
+
 export interface AdminApiKeyUpdateRequest {
   label?: string
   expires_at?: string | null

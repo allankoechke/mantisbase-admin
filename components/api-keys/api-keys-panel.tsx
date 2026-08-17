@@ -22,13 +22,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
-  SYS_API_KEYS_API,
   extractListItems,
   getApiClientError,
-  type Admin,
   type AdminApiKey,
   type AdminApiKeyCreated,
   type ApiClient,
+  type ApiKeyUser,
 } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { ApiKeySecretDialog } from "./api-key-secret-dialog"
@@ -36,17 +35,23 @@ import { CreateApiKeyDialog } from "./create-api-key-dialog"
 import { EditApiKeyDialog } from "./edit-api-key-dialog"
 
 interface ApiKeysPanelProps {
-  admins: Admin[]
+  users: ApiKeyUser[]
   apiClient: ApiClient
+  apiKeysApi: string
+  cacheKey: string
   isActive: boolean
-  defaultAdminId?: string
+  defaultUserId?: string
   createRequested?: boolean
   reloadRequested?: number
+  supportsEdit?: boolean
+  panelTitle?: string
+  userColumnLabel?: string
+  createDialogTitle?: string
+  createDialogDescription?: string
+  userFieldLabel?: string
   onCreateRequestHandled?: () => void
   onLoadingChange?: (loading: boolean) => void
 }
-
-const API_KEYS_CACHE_KEY = "mantis-admin-api-keys"
 
 function formatDate(value: string | null): string {
   if (!value) {
@@ -61,8 +66,8 @@ function formatDate(value: string | null): string {
   return date.toLocaleString()
 }
 
-function getAdminLabel(admins: Admin[], userId: string): string {
-  return admins.find((admin) => admin.id === userId)?.email ?? userId
+function getUserLabel(users: ApiKeyUser[], userId: string): string {
+  return users.find((user) => user.id === userId)?.label ?? userId
 }
 
 function toCachedApiKey(key: AdminApiKey | AdminApiKeyCreated): AdminApiKey {
@@ -70,13 +75,13 @@ function toCachedApiKey(key: AdminApiKey | AdminApiKeyCreated): AdminApiKey {
   return metadata
 }
 
-function readCachedApiKeys(): AdminApiKey[] {
+function readCachedApiKeys(cacheKey: string): AdminApiKey[] {
   if (typeof window === "undefined") {
     return []
   }
 
   try {
-    const raw = sessionStorage.getItem(API_KEYS_CACHE_KEY)
+    const raw = sessionStorage.getItem(cacheKey)
     if (!raw) {
       return []
     }
@@ -88,12 +93,12 @@ function readCachedApiKeys(): AdminApiKey[] {
   }
 }
 
-function writeCachedApiKeys(keys: AdminApiKey[]): void {
+function writeCachedApiKeys(cacheKey: string, keys: AdminApiKey[]): void {
   if (typeof window === "undefined") {
     return
   }
 
-  sessionStorage.setItem(API_KEYS_CACHE_KEY, JSON.stringify(keys))
+  sessionStorage.setItem(cacheKey, JSON.stringify(keys))
 }
 
 function mergeApiKeys(fetched: AdminApiKey[], cached: AdminApiKey[]): AdminApiKey[] {
@@ -105,38 +110,49 @@ function mergeApiKeys(fetched: AdminApiKey[], cached: AdminApiKey[]): AdminApiKe
 }
 
 export function ApiKeysPanel({
-  admins,
+  users,
   apiClient,
+  apiKeysApi,
+  cacheKey,
   isActive,
-  defaultAdminId,
+  defaultUserId,
   createRequested,
   reloadRequested = 0,
+  supportsEdit = true,
+  panelTitle = "API Keys",
+  userColumnLabel = "User",
+  createDialogTitle,
+  createDialogDescription,
+  userFieldLabel,
   onCreateRequestHandled,
   onLoadingChange,
 }: ApiKeysPanelProps) {
   const { toast } = useToast()
-  const [apiKeys, setApiKeys] = React.useState<AdminApiKey[]>(() => readCachedApiKeys())
+  const [apiKeys, setApiKeys] = React.useState<AdminApiKey[]>(() => readCachedApiKeys(cacheKey))
   const [isLoading, setIsLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
-  const [selectedAdminId, setSelectedAdminId] = React.useState<string | undefined>()
+  const [selectedUserId, setSelectedUserId] = React.useState<string | undefined>()
   const [editingKey, setEditingKey] = React.useState<AdminApiKey | null>(null)
   const [deletingKey, setDeletingKey] = React.useState<AdminApiKey | null>(null)
   const [createdSecret, setCreatedSecret] = React.useState<{ label: string; secret: string } | null>(null)
   const hasLoadedRef = React.useRef(false)
 
-  const persistApiKeys = React.useCallback((keys: AdminApiKey[]) => {
-    setApiKeys(keys)
-    writeCachedApiKeys(keys)
-  }, [])
+  const persistApiKeys = React.useCallback(
+    (keys: AdminApiKey[]) => {
+      setApiKeys(keys)
+      writeCachedApiKeys(cacheKey, keys)
+    },
+    [cacheKey],
+  )
 
   const loadApiKeys = React.useCallback(async () => {
-    const cached = readCachedApiKeys()
+    const cached = readCachedApiKeys(cacheKey)
 
     try {
       setIsLoading(true)
       onLoadingChange?.(true)
 
-      const response = await apiClient.call<unknown>(SYS_API_KEYS_API)
+      const response = await apiClient.call<unknown>(apiKeysApi)
       const error = getApiClientError(response)
       if (error) {
         throw new Error(error)
@@ -166,7 +182,7 @@ export function ApiKeysPanel({
       setIsLoading(false)
       onLoadingChange?.(false)
     }
-  }, [apiClient, onLoadingChange, persistApiKeys, toast])
+  }, [apiClient, apiKeysApi, cacheKey, onLoadingChange, persistApiKeys, toast])
 
   React.useEffect(() => {
     if (isActive) {
@@ -182,17 +198,17 @@ export function ApiKeysPanel({
 
   React.useEffect(() => {
     if (createRequested) {
-      setSelectedAdminId(defaultAdminId)
+      setSelectedUserId(defaultUserId)
       setCreating(true)
       onCreateRequestHandled?.()
     }
-  }, [createRequested, defaultAdminId, onCreateRequestHandled])
+  }, [createRequested, defaultUserId, onCreateRequestHandled])
 
   const handleCreated = (created: AdminApiKeyCreated) => {
     const metadata = toCachedApiKey(created)
     setApiKeys((current) => {
       const next = [metadata, ...current.filter((key) => key.id !== metadata.id)]
-      writeCachedApiKeys(next)
+      writeCachedApiKeys(cacheKey, next)
       return next
     })
     setCreatedSecret({ label: created.label, secret: created.key })
@@ -205,7 +221,7 @@ export function ApiKeysPanel({
   const handleUpdated = (updated: AdminApiKey) => {
     setApiKeys((current) => {
       const next = current.map((key) => (key.id === updated.id ? updated : key))
-      writeCachedApiKeys(next)
+      writeCachedApiKeys(cacheKey, next)
       return next
     })
     toast({
@@ -220,7 +236,7 @@ export function ApiKeysPanel({
     }
 
     try {
-      const response = await apiClient.call(`${SYS_API_KEYS_API}/${deletingKey.id}`, { method: "DELETE" })
+      const response = await apiClient.call(`${apiKeysApi}/${deletingKey.id}`, { method: "DELETE" })
       const error = getApiClientError(response)
       if (error) {
         throw new Error(error)
@@ -228,7 +244,7 @@ export function ApiKeysPanel({
 
       setApiKeys((current) => {
         const next = current.filter((key) => key.id !== deletingKey.id)
-        writeCachedApiKeys(next)
+        writeCachedApiKeys(cacheKey, next)
         return next
       })
       toast({
@@ -251,11 +267,11 @@ export function ApiKeysPanel({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Admin API Keys</CardTitle>
+          <CardTitle>{panelTitle}</CardTitle>
           <CardDescription>
             {isLoading && apiKeys.length === 0
               ? "Loading API keys..."
-              : `${apiKeys.length} API key${apiKeys.length === 1 ? "" : "s"} linked to admin accounts`}
+              : `${apiKeys.length} API key${apiKeys.length === 1 ? "" : "s"}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -263,7 +279,7 @@ export function ApiKeysPanel({
             <TableHeader>
               <TableRow>
                 <TableHead>Label</TableHead>
-                <TableHead>Admin</TableHead>
+                <TableHead>{userColumnLabel}</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Last Used</TableHead>
                 <TableHead>Expires</TableHead>
@@ -287,7 +303,7 @@ export function ApiKeysPanel({
                 apiKeys.map((apiKey) => (
                   <TableRow key={apiKey.id}>
                     <TableCell className="font-medium">{apiKey.label}</TableCell>
-                    <TableCell>{getAdminLabel(admins, apiKey.user_id)}</TableCell>
+                    <TableCell>{getUserLabel(users, apiKey.user_id)}</TableCell>
                     <TableCell>{formatDate(apiKey.created)}</TableCell>
                     <TableCell>{formatDate(apiKey.last_used)}</TableCell>
                     <TableCell>{apiKey.expires_at ? formatDate(apiKey.expires_at) : "Never"}</TableCell>
@@ -299,10 +315,12 @@ export function ApiKeysPanel({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditingKey(apiKey)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
+                          {supportsEdit && (
+                            <DropdownMenuItem onClick={() => setEditingKey(apiKey)}>
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem className="text-destructive" onClick={() => setDeletingKey(apiKey)}>
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
@@ -320,20 +338,27 @@ export function ApiKeysPanel({
 
       <CreateApiKeyDialog
         open={creating}
-        admins={admins}
+        users={users}
         apiClient={apiClient}
-        defaultAdminId={selectedAdminId}
+        apiKeysApi={apiKeysApi}
+        defaultUserId={selectedUserId}
+        userFieldLabel={userFieldLabel ?? userColumnLabel}
+        title={createDialogTitle}
+        description={createDialogDescription}
         onClose={() => setCreating(false)}
         onCreated={handleCreated}
       />
 
-      <EditApiKeyDialog
-        open={!!editingKey}
-        apiKey={editingKey}
-        apiClient={apiClient}
-        onClose={() => setEditingKey(null)}
-        onUpdated={handleUpdated}
-      />
+      {supportsEdit && (
+        <EditApiKeyDialog
+          open={!!editingKey}
+          apiKey={editingKey}
+          apiClient={apiClient}
+          apiKeysApi={apiKeysApi}
+          onClose={() => setEditingKey(null)}
+          onUpdated={handleUpdated}
+        />
+      )}
 
       <ApiKeySecretDialog
         open={!!createdSecret}
@@ -367,10 +392,10 @@ export function ApiKeysPanel({
 }
 
 export function openCreateApiKeyDialog(
-  setDefaultAdminId: (adminId: string | undefined) => void,
+  setDefaultUserId: (userId: string | undefined) => void,
   setCreateRequested: (requested: boolean) => void,
-  adminId?: string,
+  userId?: string,
 ) {
-  setDefaultAdminId(adminId)
+  setDefaultUserId(userId)
   setCreateRequested(true)
 }

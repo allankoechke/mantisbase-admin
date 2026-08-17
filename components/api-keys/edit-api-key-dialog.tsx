@@ -13,16 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  SYS_API_KEYS_API,
-  type AdminApiKey,
-  type ApiClient,
-} from "@/lib/api"
+import { type AdminApiKey, type ApiClient } from "@/lib/api"
 
 interface EditApiKeyDialogProps {
   open: boolean
   apiKey: AdminApiKey | null
   apiClient: ApiClient
+  apiKeysApi: string
   onClose: () => void
   onUpdated: (updated: AdminApiKey) => void
 }
@@ -46,6 +43,7 @@ export function EditApiKeyDialog({
   open,
   apiKey,
   apiClient,
+  apiKeysApi,
   onClose,
   onUpdated,
 }: EditApiKeyDialogProps) {
@@ -72,7 +70,7 @@ export function EditApiKeyDialog({
     setError("")
 
     try {
-      const updated = await apiClient.call<AdminApiKey>(`${SYS_API_KEYS_API}/${apiKey.id}`, {
+      const updated = await apiClient.call<AdminApiKey>(`${apiKeysApi}/${apiKey.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           label: label.trim() || "API Key",

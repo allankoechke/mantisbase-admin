@@ -21,31 +21,38 @@ import {
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
-  SYS_API_KEYS_API,
   getApiClientError,
-  type Admin,
   type AdminApiKeyCreated,
   type ApiClient,
+  type ApiKeyUser,
 } from "@/lib/api"
 
 interface CreateApiKeyDialogProps {
   open: boolean
-  admins: Admin[]
+  users: ApiKeyUser[]
   apiClient: ApiClient
-  defaultAdminId?: string
+  apiKeysApi: string
+  defaultUserId?: string
+  userFieldLabel?: string
+  title?: string
+  description?: string
   onClose: () => void
   onCreated: (created: AdminApiKeyCreated) => void
 }
 
 export function CreateApiKeyDialog({
   open,
-  admins,
+  users,
   apiClient,
-  defaultAdminId,
+  apiKeysApi,
+  defaultUserId,
+  userFieldLabel = "User",
+  title = "Create API Key",
+  description = "Create a new API key linked to a user account.",
   onClose,
   onCreated,
 }: CreateApiKeyDialogProps) {
-  const [adminId, setAdminId] = React.useState(defaultAdminId ?? "")
+  const [userId, setUserId] = React.useState(defaultUserId ?? "")
   const [label, setLabel] = React.useState(`api-key-${Date.now()}`)
   const [expiresAt, setExpiresAt] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(false)
@@ -53,18 +60,18 @@ export function CreateApiKeyDialog({
 
   React.useEffect(() => {
     if (open) {
-      setAdminId(defaultAdminId ?? admins[0]?.id ?? "")
+      setUserId(defaultUserId ?? users[0]?.id ?? "")
       setLabel(`api-key-${Date.now()}`)
       setExpiresAt("")
       setError("")
     }
-  }, [open, defaultAdminId, admins])
+  }, [open, defaultUserId, users])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
-    if (!adminId) {
-      setError("Select an admin account for this API key")
+    if (!userId) {
+      setError(`Select a ${userFieldLabel.toLowerCase()} for this API key`)
       return
     }
 
@@ -73,7 +80,7 @@ export function CreateApiKeyDialog({
 
     try {
       const body: Record<string, unknown> = {
-        user_id: adminId,
+        user_id: userId,
         label: label.trim() || "API Key",
       }
 
@@ -81,21 +88,21 @@ export function CreateApiKeyDialog({
         body.expires_at = new Date(expiresAt).toISOString()
       }
 
-      const created = await apiClient.call<AdminApiKeyCreated>(SYS_API_KEYS_API, {
+      const created = await apiClient.call<AdminApiKeyCreated>(apiKeysApi, {
         method: "POST",
         body: JSON.stringify(body),
       })
 
-      const error = getApiClientError(created)
-      if (error) {
-        throw new Error(error)
+      const apiError = getApiClientError(created)
+      if (apiError) {
+        throw new Error(apiError)
       }
 
       if (!created?.key) {
         throw new Error("API key was created but the secret was not returned")
       }
 
-      onCreated({ ...created, user_id: created.user_id ?? adminId })
+      onCreated({ ...created, user_id: created.user_id ?? userId })
       onClose()
     } catch (submitError) {
       console.error("Failed to create API key:", submitError)
@@ -109,8 +116,8 @@ export function CreateApiKeyDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create API Key</DialogTitle>
-          <DialogDescription>Create a new API key linked to an admin account.</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -121,15 +128,15 @@ export function CreateApiKeyDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="api-key-admin">Admin Account</Label>
-            <Select value={adminId} onValueChange={setAdminId}>
-              <SelectTrigger id="api-key-admin">
-                <SelectValue placeholder="Select admin" />
+            <Label htmlFor="api-key-user">{userFieldLabel}</Label>
+            <Select value={userId} onValueChange={setUserId}>
+              <SelectTrigger id="api-key-user">
+                <SelectValue placeholder={`Select ${userFieldLabel.toLowerCase()}`} />
               </SelectTrigger>
               <SelectContent>
-                {admins.map((admin) => (
-                  <SelectItem key={admin.id} value={admin.id}>
-                    {admin.email}
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -161,7 +168,7 @@ export function CreateApiKeyDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || admins.length === 0}>
+            <Button type="submit" disabled={isLoading || users.length === 0}>
               {isLoading ? "Creating..." : "Create API Key"}
             </Button>
           </DialogFooter>

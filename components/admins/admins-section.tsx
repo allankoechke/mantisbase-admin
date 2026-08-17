@@ -9,10 +9,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { SYS_ADMINS_API, extractListItems, getApiClientError, type ApiClient, type Admin } from "@/lib/api"
+import { SYS_ADMINS_API, SYS_API_KEYS_API, extractListItems, getApiClientError, type ApiClient, type Admin } from "@/lib/api"
 import { ChangePasswordDialog } from "./change-password-dialog"
 import { AddItemDrawer } from "../database/add-item-drawer"
-import { ApiKeysPanel, openCreateApiKeyDialog } from "./api-keys-panel"
+import { ApiKeysPanel, openCreateApiKeyDialog } from "../api-keys/api-keys-panel"
 import { useToast } from "@/hooks/use-toast"
 
 interface AdminsSectionProps {
@@ -31,6 +31,11 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
   const [apiKeysReloadRequested, setApiKeysReloadRequested] = React.useState(0)
   const [apiKeysLoading, setApiKeysLoading] = React.useState(false)
   const { toast } = useToast()
+
+  const adminUsers = React.useMemo(
+    () => admins.map((admin) => ({ id: admin.id, label: admin.email })),
+    [admins],
+  )
 
   const table: any = {
     has_api: true,
@@ -287,14 +292,21 @@ export function AdminsSection({ admins, apiClient, onAdminsUpdate }: AdminsSecti
 
         <TabsContent value="api-keys" className="space-y-6">
           <ApiKeysPanel
-            admins={admins}
+            users={adminUsers}
             apiClient={apiClient}
+            apiKeysApi={SYS_API_KEYS_API}
+            cacheKey="mantis-admin-api-keys"
             isActive={activeTab === "api-keys"}
-            defaultAdminId={createApiKeyForAdminId}
+            defaultUserId={createApiKeyForAdminId}
             createRequested={createApiKeyRequested}
             reloadRequested={apiKeysReloadRequested}
             onCreateRequestHandled={() => setCreateApiKeyRequested(false)}
             onLoadingChange={setApiKeysLoading}
+            panelTitle="Admin API Keys"
+            userColumnLabel="Admin"
+            createDialogTitle="Create API Key"
+            createDialogDescription="Create a new API key linked to an admin account."
+            userFieldLabel="Admin Account"
           />
         </TabsContent>
       </Tabs>

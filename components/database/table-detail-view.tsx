@@ -1,20 +1,23 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCw, Cog, FileText, Trash2, Search, Plus } from "lucide-react"
+import { RefreshCw, Cog, FileText, Trash2, Search, Plus, Key, MoreHorizontal } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { ApiClient, TableMetadata, getApiBaseUrl } from "@/lib/api"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ApiClient, TableMetadata, entityApiKeysApi, getApiBaseUrl } from "@/lib/api"
+import { toApiKeyUsers } from "@/lib/entity-users"
+import { ApiKeysPanel, openCreateApiKeyDialog } from "@/components/api-keys/api-keys-panel"
 import { TableConfigDrawer } from "./table-config-drawer"
 import { TableRecordDocsDrawer } from "./table-records-docs-drawer"
 import { EditItemDrawer } from "./edit-item-drawer"
 import { AddItemDrawer } from "./add-item-drawer"
 import { ColumnVisibilityDropdown } from "./column-visibility-dropdown"
-import { useToast } from "@/hooks/use-toast"
 import { useSearchParams } from "react-router-dom"
 
 interface TableDetailViewProps {
@@ -41,8 +44,17 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     table.schema.fields?.map((field) => field.name) || [],
   )
   const [isDeleting, setIsDeleting] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState("records")
+  const [createApiKeyForUserId, setCreateApiKeyForUserId] = React.useState<string | undefined>()
+  const [createApiKeyRequested, setCreateApiKeyRequested] = React.useState(false)
+  const [apiKeysReloadRequested, setApiKeysReloadRequested] = React.useState(0)
+  const [apiKeysLoading, setApiKeysLoading] = React.useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
-  const { toast } = useToast()
+
+  const isAuthEntity = table.schema.type === "auth"
+  const entityUsers = React.useMemo(() => toApiKeyUsers(tableData), [tableData])
+  const entityApiKeysPath = entityApiKeysApi(table.schema.name)
+  const entityApiKeysCacheKey = `mantis-entity-api-keys-${table.schema.name}`
   
   const initialFilter = searchParams.get("filter") || ""
   const [filterTerm, setFilterTerm] = React.useState(initialFilter)
@@ -66,6 +78,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     setSelectedItems([])
     setFilterTerm("")
     setAppliedFilter("")
+    setActiveTab("records")
     setIsLoading(true)
     
     // Update visible columns based on new table schema
@@ -210,6 +223,11 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     }
   }
 
+  const handleCreateApiKeyForUser = (userId: string) => {
+    openCreateApiKeyDialog(setCreateApiKeyForUserId, setCreateApiKeyRequested, userId)
+    setActiveTab("api-keys")
+  }
+
   const filteredFields = table.schema.fields?.filter((field) => visibleColumns.includes(field.name)) || []
 
   function renderCellContent(field: { name: string; type: string }, value: any) {
@@ -279,199 +297,338 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">
-            Entity <span className="text-primary font-mono italic">'{table.schema.name}'</span> data
-          </h2>
+  const recordsCard = (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Table Data</CardTitle>
+            <CardDescription>Current records in the {table.schema.name} table</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedItems.length > 0 && (
+              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={isDeleting}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                {isDeleting
+                  ? "Deleting..."
+                  : `Delete ${selectedItems.length} item${selectedItems.length > 1 ? "s" : ""}`}
+              </Button>
+            )}
+            <ColumnVisibilityDropdown
+              table={table}
+              visibleColumns={visibleColumns}
+              onVisibilityChange={setVisibleColumns}
+            />
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={handleReload} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => setConfigOpen(true)}>
-            <Cog className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => setDocsOpen(true)}>
-            <FileText className="h-4 w-4" />
-          </Button>
-          {!isViewType && (
-            <Button size="sm" onClick={handleAddItem} disabled={isLoading}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Record
-            </Button>
-          )}
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedItems.length === tableData.length && tableData.length > 0}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all"
+                  />
+                </TableHead>
+                {filteredFields.map((field) => (
+                  <TableHead key={field.name}>
+                    {field.name}
+                  </TableHead>
+                ))}
+                {isAuthEntity && <TableHead>Actions</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={filteredFields.length + 1 + (isAuthEntity ? 1 : 0)} className="text-center text-muted-foreground h-64">
+                    Loading...
+                  </TableCell>
+                </TableRow>
+              ) : tableData.length > 0 ? (
+                tableData.map((row, index) => (
+                  <TableRow
+                    key={index}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={(e) => handleRowClick(row, e)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedItems.includes(row.id)}
+                        onCheckedChange={(checked) => handleSelectItem(row.id, checked as boolean)}
+                        aria-label={`Select row ${index + 1}`}
+                      />
+                    </TableCell>
+                    {filteredFields.map((field) => (
+                      <TableCell key={field.name} className="max-w-0">
+                        <div className="min-w-0 max-w-full line-clamp-2 break-words overflow-hidden text-ellipsis" title={typeof row[field.name] === "string" ? row[field.name] : undefined}>
+                          {renderCellContent(field, row[field.name])}
+                        </div>
+                      </TableCell>
+                    ))}
+                    {isAuthEntity && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleCreateApiKeyForUser(row.id)}>
+                              <Key className="mr-2 h-4 w-4" />
+                              Create API Key
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={filteredFields.length + 1 + (isAuthEntity ? 1 : 0)} className="text-center h-64 align-middle">
+                    <div className="flex flex-col items-center justify-center py-16">
+                      <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No Records Found</h3>
+                      <p className="text-muted-foreground text-center mb-6 max-w-md">
+                        This table doesn't have any records yet. Add some data to get started.
+                      </p>
+                      <div className="flex gap-3">
+                        {!isViewType && (
+                          <Button onClick={handleAddItem} disabled={isDeleting || isLoading}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            New Record
+                          </Button>
+                        )}
+                        <Button variant="outline" onClick={() => setDocsOpen(true)} disabled={isDeleting}>
+                          <FileText className="h-4 w-4 mr-2" />
+                          View API Documentation
+                        </Button>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
-      </div>
 
-      {/* Search/Filter Bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-        <Input
-          placeholder="Search records..."
-          value={filterTerm}
-          onChange={(e) => setFilterTerm(e.target.value)}
-          onKeyPress={handleFilterKeyPress}
-          className="pl-10 pr-20"
-        />
-        <Button 
-          onClick={handleFilter} 
-          disabled={isLoading}
-          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7"
-          size="sm"
-        >
-          Filter
-        </Button>
-        {appliedFilter && (
-          <div className="flex items-center gap-2 mt-2">
-            <p className="text-sm text-muted-foreground">Filtering by: "{appliedFilter}"</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFilterTerm("")
-                setAppliedFilter("")
-                setSearchParams({}, { replace: true })
-              }}
-              className="h-6 text-xs"
-            >
-              Clear
-            </Button>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
-      </div>
+      </CardContent>
+    </Card>
+  )
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+  return (
+    <div className="space-y-6">
+      {isAuthEntity ? (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <CardTitle>Table Data</CardTitle>
-              <CardDescription>Current records in the {table.schema.name} table</CardDescription>
+              <h2 className="text-2xl font-bold">
+                Entity <span className="text-primary font-mono italic">'{table.schema.name}'</span> data
+              </h2>
             </div>
             <div className="flex items-center gap-2">
-              {selectedItems.length > 0 && (
-                <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={isDeleting}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {isDeleting
-                    ? "Deleting..."
-                    : `Delete ${selectedItems.length} item${selectedItems.length > 1 ? "s" : ""}`}
+              <TabsList>
+                <TabsTrigger value="records">Records</TabsTrigger>
+                <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+              </TabsList>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  activeTab === "api-keys"
+                    ? setApiKeysReloadRequested((count) => count + 1)
+                    : handleReload()
+                }
+                disabled={activeTab === "api-keys" ? apiKeysLoading : isLoading}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${(activeTab === "api-keys" ? apiKeysLoading : isLoading) ? "animate-spin" : ""}`}
+                />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setConfigOpen(true)}>
+                <Cog className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setDocsOpen(true)}>
+                <FileText className="h-4 w-4" />
+              </Button>
+              {!isViewType && activeTab === "records" && (
+                <Button size="sm" onClick={handleAddItem} disabled={isLoading}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Record
                 </Button>
               )}
-              <ColumnVisibilityDropdown
-                table={table}
-                visibleColumns={visibleColumns}
-                onVisibilityChange={setVisibleColumns}
-              />
+              {activeTab === "api-keys" && (
+                <Button
+                  size="sm"
+                  onClick={() => openCreateApiKeyDialog(setCreateApiKeyForUserId, setCreateApiKeyRequested)}
+                  disabled={entityUsers.length === 0}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New API Key
+                </Button>
+              )}
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedItems.length === tableData.length && tableData.length > 0}
-                      onCheckedChange={handleSelectAll}
-                      aria-label="Select all"
-                    />
-                  </TableHead>
-                  {filteredFields.map((field) => (
-                    <TableHead key={field.name}>
-                      {field.name}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={filteredFields.length + 1} className="text-center text-muted-foreground h-64">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : tableData.length > 0 ? (
-                  tableData.map((row, index) => (
-                    <TableRow
-                      key={index}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={(e) => handleRowClick(row, e)}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedItems.includes(row.id)}
-                          onCheckedChange={(checked) => handleSelectItem(row.id, checked as boolean)}
-                          aria-label={`Select row ${index + 1}`}
-                        />
-                      </TableCell>
-                      {filteredFields.map((field) => (
-                        <TableCell key={field.name} className="max-w-0">
-                          <div className="min-w-0 max-w-full line-clamp-2 break-words overflow-hidden text-ellipsis" title={typeof row[field.name] === "string" ? row[field.name] : undefined}>
-                            {renderCellContent(field, row[field.name])}
-                          </div>
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={filteredFields.length + 1} className="text-center h-64 align-middle">
-                      <div className="flex flex-col items-center justify-center py-16">
-                        <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">No Records Found</h3>
-                        <p className="text-muted-foreground text-center mb-6 max-w-md">
-                          This table doesn't have any records yet. Add some data to get started.
-                        </p>
-                        <div className="flex gap-3">
-                          {!isViewType && (
-                            <Button onClick={handleAddItem} disabled={isDeleting || isLoading}>
-                              <Plus className="h-4 w-4 mr-2" />
-                              New Record
-                            </Button>
-                          )}
-                          <Button variant="outline" onClick={() => setDocsOpen(true)} disabled={isDeleting}>
-                            <FileText className="h-4 w-4 mr-2" />
-                            View API Documentation
-                          </Button>
-                        </div>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </Button>
-              </div>
+          {activeTab === "records" && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+              <Input
+                placeholder="Search records..."
+                value={filterTerm}
+                onChange={(e) => setFilterTerm(e.target.value)}
+                onKeyPress={handleFilterKeyPress}
+                className="pl-10 pr-20"
+              />
+              <Button
+                onClick={handleFilter}
+                disabled={isLoading}
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7"
+                size="sm"
+              >
+                Filter
+              </Button>
+              {appliedFilter && (
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-sm text-muted-foreground">Filtering by: "{appliedFilter}"</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setFilterTerm("")
+                      setAppliedFilter("")
+                      setSearchParams({}, { replace: true })
+                    }}
+                    className="h-6 text-xs"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              )}
             </div>
           )}
-        </CardContent>
-      </Card>
+
+          <TabsContent value="records" className="mt-0 space-y-6">
+            {recordsCard}
+          </TabsContent>
+          <TabsContent value="api-keys" className="mt-0 space-y-6">
+            <ApiKeysPanel
+              users={entityUsers}
+              apiClient={apiClient}
+              apiKeysApi={entityApiKeysPath}
+              cacheKey={entityApiKeysCacheKey}
+              isActive={activeTab === "api-keys"}
+              defaultUserId={createApiKeyForUserId}
+              createRequested={createApiKeyRequested}
+              reloadRequested={apiKeysReloadRequested}
+              onCreateRequestHandled={() => setCreateApiKeyRequested(false)}
+              onLoadingChange={setApiKeysLoading}
+              supportsEdit={false}
+              panelTitle={`${table.schema.name} API Keys`}
+              userColumnLabel="User"
+              createDialogTitle="Create Entity API Key"
+              createDialogDescription={`Create a new API key linked to a user in ${table.schema.name}.`}
+              userFieldLabel="User"
+            />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">
+                Entity <span className="text-primary font-mono italic">'{table.schema.name}'</span> data
+              </h2>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="icon" onClick={handleReload} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setConfigOpen(true)}>
+                <Cog className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setDocsOpen(true)}>
+                <FileText className="h-4 w-4" />
+              </Button>
+              {!isViewType && (
+                <Button size="sm" onClick={handleAddItem} disabled={isLoading}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Record
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+            <Input
+              placeholder="Search records..."
+              value={filterTerm}
+              onChange={(e) => setFilterTerm(e.target.value)}
+              onKeyPress={handleFilterKeyPress}
+              className="pl-10 pr-20"
+            />
+            <Button
+              onClick={handleFilter}
+              disabled={isLoading}
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7"
+              size="sm"
+            >
+              Filter
+            </Button>
+            {appliedFilter && (
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-sm text-muted-foreground">Filtering by: "{appliedFilter}"</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFilterTerm("")
+                    setAppliedFilter("")
+                    setSearchParams({}, { replace: true })
+                  }}
+                  className="h-6 text-xs"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {recordsCard}
+        </>
+      )}
 
       <TableConfigDrawer
         table={table}
