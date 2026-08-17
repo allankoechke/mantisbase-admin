@@ -70,6 +70,80 @@ export const SYS_ADMINS_API = "/api/v1/sys/admins" as const
 /** Application settings (GET/PATCH). */
 export const SYS_SETTINGS_CONFIG_API = "/api/v1/sys/settings/config" as const
 
+/** Admin API keys (list, create, update, revoke). */
+export const SYS_API_KEYS_API = "/api/v1/sys/api-keys" as const
+
+export interface AdminApiKey {
+  id: string
+  entity_name: string
+  user_id: string
+  label: string
+  permissions: unknown[]
+  last_used: string | null
+  created: string
+  expires_at: string | null
+}
+
+export interface AdminApiKeyCreated extends AdminApiKey {
+  key: string
+}
+
+export interface AdminApiKeyCreateRequest {
+  user_id: string
+  label?: string
+  permissions?: unknown[]
+  expires_at?: string
+}
+
+export interface AdminApiKeyUpdateRequest {
+  label?: string
+  expires_at?: string | null
+}
+
+/** Extract list items from direct arrays or paginated API responses. */
+export function extractListItems<T>(response: unknown): T[] {
+  if (Array.isArray(response)) {
+    return response
+  }
+
+  if (response && typeof response === "object") {
+    const record = response as Record<string, unknown>
+    if (Array.isArray(record.items)) {
+      return record.items as T[]
+    }
+
+    const data = record.data
+    if (Array.isArray(data)) {
+      return data as T[]
+    }
+    if (data && typeof data === "object") {
+      const nested = data as Record<string, unknown>
+      if (Array.isArray(nested.items)) {
+        return nested.items as T[]
+      }
+    }
+  }
+
+  return []
+}
+
+/** Detect error objects returned by ApiClient.call's catch handler. */
+export function getApiClientError(response: unknown): string | null {
+  if (!response || typeof response !== "object") {
+    return null
+  }
+
+  const record = response as { error?: unknown; status?: unknown }
+  if (typeof record.error === "string" && record.error.length > 0) {
+    const status = typeof record.status === "number" ? record.status : 0
+    if (status >= 400 || status <= 0) {
+      return record.error
+    }
+  }
+
+  return null
+}
+
 /** HttpOnly cookie name set by the MantisBase backend on admin login/refresh; cleared on logout. */
 export const ADMIN_SESSION_COOKIE = "admin_token" as const
 
