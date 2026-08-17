@@ -21,6 +21,7 @@ export interface TableField {
   required: boolean
   system: boolean
   type: string
+  precision?: string | null
   unique: boolean
   constraints: FieldConstraints
   foreign_key?: ForeignKeyConfig // optional foreign key configuration

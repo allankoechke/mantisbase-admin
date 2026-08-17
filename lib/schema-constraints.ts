@@ -4,22 +4,9 @@
  */
 
 import type { FieldConstraints } from "@/lib/api"
+import { isIntFieldType, isUnsignedPrecision } from "@/lib/field-types"
 
-const INTEGER_TYPES = new Set([
-  "int8",
-  "int16",
-  "int32",
-  "int64",
-  "uint8",
-  "uint16",
-  "uint32",
-  "uint64",
-])
-
-const NUMERIC_TYPES = new Set([
-  ...INTEGER_TYPES,
-  "double",
-])
+const NUMERIC_TYPES = new Set(["double", "int"])
 
 export interface RawConstraintsInput {
   default_value: unknown
@@ -66,7 +53,19 @@ function validateMinMaxOrder(min: number | null, max: number | null): string | n
   return null
 }
 
-function parseDefaultValue(fieldType: string, raw: unknown): { ok: true; value: unknown } | { ok: false; message: string } {
+function isUnsignedIntegerField(fieldType: string, precision?: string | null): boolean {
+  if (fieldType === "int") {
+    return isUnsignedPrecision(precision)
+  }
+
+  return fieldType.startsWith("uint")
+}
+
+function parseDefaultValue(
+  fieldType: string,
+  raw: unknown,
+  precision?: string | null,
+): { ok: true; value: unknown } | { ok: false; message: string } {
   if (raw === null || raw === undefined) {
     return { ok: true, value: null }
   }
@@ -80,10 +79,12 @@ function parseDefaultValue(fieldType: string, raw: unknown): { ok: true; value: 
 
   switch (fieldType) {
     case "string":
-    case "xml": {
+    case "xml":
+    case "blob": {
       return { ok: true, value: typeof raw === "string" ? raw : String(raw) }
     }
 
+    case "int":
     case "int8":
     case "int16":
     case "int32":
@@ -99,7 +100,7 @@ function parseDefaultValue(fieldType: string, raw: unknown): { ok: true; value: 
       if (!Number.isInteger(n)) {
         return { ok: false, message: "Default value must be an integer for this field type." }
       }
-      if (fieldType.startsWith("uint") && n < 0) {
+      if (isUnsignedIntegerField(fieldType, precision) && n < 0) {
         return { ok: false, message: "Default value must be non-negative for unsigned integer fields." }
       }
       return { ok: true, value: n }
@@ -192,6 +193,7 @@ export function formatConstraintDefaultForInput(fieldType: string, value: unknow
 export function normalizeConstraintsForFieldType(
   fieldType: string,
   input: RawConstraintsInput,
+  precision?: string | null,
 ): ConstraintsNormalizeResult {
   const minR = normalizeConstraintBound(input.min_value)
   if (!minR.ok) {
@@ -207,13 +209,14 @@ export function normalizeConstraintsForFieldType(
     return { ok: false, message: orderErr }
   }
 
-  if (NUMERIC_TYPES.has(fieldType)) {
-    const minInt = minR.value !== null && INTEGER_TYPES.has(fieldType) && !Number.isInteger(minR.value)
-    const maxInt = maxR.value !== null && INTEGER_TYPES.has(fieldType) && !Number.isInteger(maxR.value)
+  if (NUMERIC_TYPES.has(fieldType) || isIntFieldType(fieldType)) {
+    const isInteger = isIntFieldType(fieldType)
+    const minInt = minR.value !== null && isInteger && !Number.isInteger(minR.value)
+    const maxInt = maxR.value !== null && isInteger && !Number.isInteger(maxR.value)
     if (minInt || maxInt) {
       return { ok: false, message: "Min/max for integer types must be whole numbers." }
     }
-    if (fieldType.startsWith("uint")) {
+    if (isUnsignedIntegerField(fieldType, precision)) {
       if (minR.value !== null && minR.value < 0) {
         return { ok: false, message: "Min cannot be negative for unsigned integer fields." }
       }
@@ -223,7 +226,7 @@ export function normalizeConstraintsForFieldType(
     }
   }
 
-  const defR = parseDefaultValue(fieldType, input.default_value)
+  const defR = parseDefaultValue(fieldType, input.default_value, precision)
   if (!defR.ok) {
     return { ok: false, message: defR.message }
   }

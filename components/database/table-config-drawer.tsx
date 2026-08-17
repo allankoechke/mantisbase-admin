@@ -32,7 +32,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { ApiClient, TableMetadata, ForeignKeyConfig } from "@/lib/api"
-import { dataTypes } from "@/lib/constants"
+import { dataTypes, intPrecisions, DEFAULT_INT_PRECISION } from "@/lib/constants"
+import {
+  appendPrecisionToFieldPayload,
+  applyFieldTypeChange,
+  normalizeFieldTypeForEditor,
+} from "@/lib/field-types"
 import { useToast } from "@/hooks/use-toast"
 import { useNavigate } from "react-router-dom"
 import { ROUTES } from "@/lib/routes"
@@ -98,18 +103,23 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   React.useEffect(() => {
     if (open) {
       // Transform API format (with constraints) to UI format (flat camelCase)
-      const transformedColumns = table.schema?.fields.map(col => ({
-        ...col,
-        old_name: col.name,
-        // Flatten constraints for UI
-        primaryKey: col.primary_key || false,
-        minValue: col.constraints?.min_value || null,
-        maxValue: col.constraints?.max_value || null,
-        defaultValue: col.constraints?.default_value || null,
-        validator: col.constraints?.validator || null,
-        // Include foreign_key if present
-        foreign_key: col.foreign_key,
-      })) || []
+      const transformedColumns = table.schema?.fields.map(col => {
+        const normalized = normalizeFieldTypeForEditor(col)
+        return {
+          ...col,
+          type: normalized.type,
+          precision: normalized.precision,
+          old_name: col.name,
+          // Flatten constraints for UI
+          primaryKey: col.primary_key || false,
+          minValue: col.constraints?.min_value || null,
+          maxValue: col.constraints?.max_value || null,
+          defaultValue: col.constraints?.default_value || null,
+          validator: col.constraints?.validator || null,
+          // Include foreign_key if present
+          foreign_key: col.foreign_key,
+        }
+      }) || []
       setColumns(transformedColumns)
       // Initialize rules with mode and expr from API
       // Convert empty string to "admin" for UI (Select doesn't allow empty string values)
@@ -148,7 +158,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
     setColumns([...columns, { 
       id: `field-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: "", 
-      type: "string", 
+      type: "string",
+      precision: null,
       primary_key: false,
       primaryKey: false, // UI format
       required: true, 
@@ -202,13 +213,20 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   // Update existing column data
   const updateColumn = (index: number, field: string, value: any) => {
     const updatedColumns = columns.map((col, i) => {
-      if (i === index) {
-        var updated = { ...col }
-        updated[field] = value
-        return updated;
+      if (i !== index) {
+        return col
       }
 
-      return col
+      if (field === "type") {
+        const typeUpdate = applyFieldTypeChange(col.type, value, col.precision)
+        return {
+          ...col,
+          type: typeUpdate.type,
+          precision: typeUpdate.precision,
+        }
+      }
+
+      return { ...col, [field]: value }
     })
 
     setColumns(updatedColumns)
@@ -234,12 +252,22 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           validator:
             col.validator !== undefined ? col.validator : (col.constraints?.validator ?? null),
         }
-        const normalized = normalizeConstraintsForFieldType(col.type, rawConstraints)
+        const normalized = normalizeConstraintsForFieldType(col.type, rawConstraints, col.precision)
         if (!normalized.ok) {
           toast({
             variant: "destructive",
             title: "Invalid constraints",
             description: `${col.name || "Field"}: ${normalized.message}`,
+            duration: 5000,
+          })
+          setIsLoading(false)
+          return
+        }
+        if (col.type === "int" && !col.precision) {
+          toast({
+            variant: "destructive",
+            title: "Invalid field",
+            description: `${col.name || "Field"}: integer fields require a precision.`,
             duration: 5000,
           })
           setIsLoading(false)
@@ -256,6 +284,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           constraints: normalized.constraints,
           ...(col.old_name && { old_name: col.old_name }),
         }
+        appendPrecisionToFieldPayload(fieldData, col)
         if (col.foreign_key && col.foreign_key.entity && col.foreign_key.field) {
           fieldData.foreign_key = col.foreign_key
         }
@@ -504,7 +533,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                     className={isSystem ? "bg-muted" : ""}
                                   />
                                 </div>
-                                <div>
+                                <div className={column.type === "int" ? "grid grid-cols-2 gap-2" : ""}>
                                   <Select
                                     value={column.type}
                                     onValueChange={(value) => updateColumn(index, "type", value)}
@@ -521,6 +550,24 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                       ))}
                                     </SelectContent>
                                   </Select>
+                                  {column.type === "int" && (
+                                    <Select
+                                      value={column.precision ?? DEFAULT_INT_PRECISION}
+                                      onValueChange={(value) => updateColumn(index, "precision", value)}
+                                      disabled={isSystem}
+                                    >
+                                      <SelectTrigger className={isSystem ? "bg-muted" : ""}>
+                                        <SelectValue placeholder="Precision" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {intPrecisions.map((precision) => (
+                                          <SelectItem key={precision} value={precision}>
+                                            {precision}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
                                 </div>
                               </div>
                               {!isSystem && (
