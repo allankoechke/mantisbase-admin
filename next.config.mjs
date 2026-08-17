@@ -26,6 +26,21 @@ const nextConfig = {
   // This allows dynamic routes to work in development
   ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
   trailingSlash: true,
+  async rewrites() {
+    if (process.env.NODE_ENV === 'production') {
+      return []
+    }
+
+    const port = process.env.MANTIS_PORT || '7070'
+    const target = (process.env.MANTIS_PROXY_URL || `http://127.0.0.1:${port}`).replace(/\/+$/, '')
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${target}/api/:path*`,
+      },
+    ]
+  },
 }
 
 

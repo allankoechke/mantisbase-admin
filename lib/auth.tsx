@@ -53,6 +53,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = React.useCallback(async (email: string, password: string) => {
     const result = await loginWithPassword(email, password)
+    const authenticated = await checkAuthSession()
+    if (!authenticated) {
+      throw new Error(
+        "Login succeeded but the session cookie was not established. Ensure the admin UI and API share the same origin.",
+      )
+    }
     setUser(result.user)
     setIsAuthenticated(true)
   }, [])

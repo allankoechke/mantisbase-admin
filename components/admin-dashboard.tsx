@@ -31,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin, type AppSettings } from "@/lib/api"
+import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin } from "@/lib/api"
 import { DatabaseSection } from "./database/database-section"
 import { AdminsSection } from "./admins/admins-section"
 import { SettingsSection } from "./settings/settings-section"
@@ -42,7 +42,6 @@ import { ThemeToggle } from "./theme-toggle"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/lib/auth"
 import { getDashboardSection, ROUTES } from "@/lib/routes"
-import { useAppState, type AppMode } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 
 export function AdminDashboard() {
@@ -50,14 +49,12 @@ export function AdminDashboard() {
   const [tables, setTables] = React.useState<TableMetadata[]>([])
   const [admins, setAdmins] = React.useState<Admin[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [settings, setSettings] = React.useState<AppSettings | null>(null)
   const [authErrorDialog, setAuthErrorDialog] = React.useState(false)
   const [authErrorReason, setAuthErrorReason] = React.useState("") // Auth error reason
   const { toast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout } = useAuth()
-  const { mode } = useAppState()
+  const { logout, refreshSession } = useAuth()
 
   const showError = React.useCallback(
     (error: string, type: "error" | "warning" = "error") => {
@@ -87,15 +84,19 @@ export function AdminDashboard() {
     [toast],
   )
 
-  const handleUnauthorized = React.useCallback((reason?: string | "") => {
+  const handleUnauthorized = React.useCallback(async (reason?: string | "") => {
     try {
-      setAuthErrorReason(reason || "")  // Set the auth error string
-      setAuthErrorDialog(true)    // Set the auth dialog to open
-      // Don't call handleLogout() here - let the dialog handle navigation
+      const stillAuthenticated = await refreshSession()
+      if (stillAuthenticated) {
+        return
+      }
+
+      setAuthErrorReason(reason || "")
+      setAuthErrorDialog(true)
     } catch (error) {
       console.warn("Failed to handle unauthorized:", error)
     }
-  }, [])
+  }, [refreshSession])
 
   const [apiClient, setApiClient] = React.useState(
     () => new ApiClient(handleUnauthorized, showError),
@@ -144,20 +145,6 @@ export function AdminDashboard() {
   }, [location.pathname, loadAdmins])
 
   const loadData = async () => {
-    // Set default settings if loading fails
-    setSettings({
-      appName: "ACME Mantis Project",
-      baseUrl: "http://127.0.0.1:7070",
-      mantisVersion: "0.0.0",
-      maintenanceMode: false,
-      maxFileSize: 10,
-      allowRegistration: true,
-      emailVerificationRequired: false,
-      sessionTimeout: 84000,
-      adminSessionTimeout: 3600,
-      mode: mode,
-    })
-
     try {
       setLoading(true)
 
@@ -207,14 +194,6 @@ export function AdminDashboard() {
     }
   }
 
-  const handleModeChange = (newMode: AppMode, baseUrl?: string) => {
-    // Update API client when mode changes (mode is handled via app state)
-    const newApiClient = new ApiClient(handleUnauthorized, showError)
-    setApiClient(newApiClient)
-
-    // Reload data with new mode
-    loadData()
-  }
 
   const sidebarItems = [
     {
@@ -370,14 +349,7 @@ export function AdminDashboard() {
                 )}
                 {currentSection === "logs" && <LogsSection apiClient={apiClient} />}
                 {currentSection === "sync" && <SyncSection />}
-                {currentSection === "settings" && (
-                  <SettingsSection
-                    apiClient={apiClient}
-                    settings={settings}
-                    onSettingsUpdate={setSettings}
-                    onModeChange={handleModeChange}
-                  />
-                )}
+                {currentSection === "settings" && <SettingsSection apiClient={apiClient} />}
               </>
             )}
           </main>

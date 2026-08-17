@@ -1,9 +1,5 @@
 "use client"
 
-import type { AppMode } from "./app-state"
-
-
-// Updated interfaces to match the API response format
 export interface FieldConstraints {
   default_value: any
   max_value: number | null
@@ -84,31 +80,37 @@ export function getApiBaseUrl(): string {
     return override.replace(/\/+$/, "")
   }
 
-  const mode = process?.env?.NODE_ENV || "production"
-  const port = process?.env?.MANTIS_PORT || 7070
-
-  if (mode === "development") {
-    return `http://localhost:${port}`
-  }
-
   if (typeof window !== "undefined") {
     return window.location.origin
   }
 
-  return `http://localhost:${port}`
+  const port = process?.env?.MANTIS_PORT || 7070
+  return `http://127.0.0.1:${port}`
+}
+
+export interface SmtpConfig {
+  host: string
+  port: number
+  user: string
+  password: string
+  from: string
+  tls: boolean
 }
 
 export interface AppSettings {
-  allowRegistration: boolean
-  appName: string
-  baseUrl: string
+  orgName: string
+  siteDomain: string
+  corsAllowedOrigins: string[]
+  maxFileSize: number
+  logRetentionDays: number
+  disableAdminRegistration: boolean
+  disableSchemaMutations: boolean
   emailVerificationRequired: boolean
-  maintenanceMode: boolean
-  maxFileSize: Number
-  mode: AppMode
-  sessionTimeout: Number
-  adminSessionTimeout: Number
-  mantisVersion: string
+  sessionTimeout: number
+  adminSessionTimeout: number
+  jwtEnableSetIssuer: boolean
+  jwtEnableSetAudience: boolean
+  smtp: SmtpConfig
 }
 
 // API Response interface
