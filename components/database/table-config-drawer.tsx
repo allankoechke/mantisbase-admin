@@ -37,7 +37,9 @@ import {
   appendPrecisionToFieldPayload,
   applyFieldTypeChange,
   normalizeFieldTypeForEditor,
+  schemaFieldsNeedMigration,
 } from "@/lib/field-types"
+import { migrateSchemaFieldsIfNeeded } from "@/lib/schema-migration"
 import { useToast } from "@/hooks/use-toast"
 import { useNavigate } from "react-router-dom"
 import { ROUTES } from "@/lib/routes"
@@ -151,8 +153,30 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       setHasUnsavedChanges(false)
       setExpandedFields(new Set())
       setDeletedColumns([])
+
+      void (async () => {
+        try {
+          const fresh = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`)
+          if ((fresh as { error?: unknown[] })?.error?.length) {
+            return
+          }
+          if (!schemaFieldsNeedMigration(fresh.schema?.fields ?? [])) {
+            return
+          }
+
+          const migrated = await migrateSchemaFieldsIfNeeded(apiClient, fresh)
+          if (migrated) {
+            onTableUpdate(migrated)
+          } else {
+            setHasUnsavedChanges(true)
+          }
+        } catch (error) {
+          console.error("Failed to migrate legacy field types:", error)
+          setHasUnsavedChanges(true)
+        }
+      })()
     }
-  }, [open, table])
+  }, [open, table, apiClient, onTableUpdate])
 
   const addColumn = () => {
     setColumns([...columns, { 
@@ -312,6 +336,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       if ((updatedTable as any)?.error?.length > 0) throw (updatedTable as any).error
 
       onTableUpdate(updatedTable)
+      setHasUnsavedChanges(false)
       toast({
         title: "Table Updated",
         description: "Table fields updated successfully.",

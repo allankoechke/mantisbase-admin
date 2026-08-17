@@ -139,3 +139,12 @@ export function appendPrecisionToFieldPayload(
     fieldData.precision = field.precision ?? DEFAULT_INT_PRECISION
   }
 }
+
+/** True when a field still uses a removed legacy type from the API. */
+export function fieldNeedsTypeMigration(field: { type: string }): boolean {
+  return LEGACY_INT_TYPES.has(field.type) || LEGACY_STRING_TYPES.has(field.type)
+}
+
+export function schemaFieldsNeedMigration(fields: { type: string }[]): boolean {
+  return fields.some(fieldNeedsTypeMigration)
+}

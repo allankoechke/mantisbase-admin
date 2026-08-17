@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { ApiClient, TableMetadata } from "@/lib/api"
+import { applySchemaListMigration } from "@/lib/schema-migration"
 import { AddTableDialog } from "./add-table-dialog"
 import { TableDetailView } from "./table-detail-view"
 import { TableDocsDrawer } from "./table-docs-drawer"
@@ -119,7 +120,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
       } else if (response?.data && Array.isArray(response.data)) {
         updatedTables = response.data
       }
-      onTablesUpdate(updatedTables)
+      onTablesUpdate(await applySchemaListMigration(apiClient, updatedTables))
       setDeleteTable(null)
       toast({
         title: "Entity deleted",
@@ -163,7 +164,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
       } else if (response?.data && Array.isArray(response.data)) {
         updatedTables = response.data
       }
-      onTablesUpdate(updatedTables)
+      onTablesUpdate(await applySchemaListMigration(apiClient, updatedTables))
       setRenameTable(null)
       setRenameNewName("")
       toast({
@@ -202,7 +203,8 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
         updatedTables = response.data
       }
 
-      onTablesUpdate(updatedTables)
+      const migratedTables = await applySchemaListMigration(apiClient, updatedTables)
+      onTablesUpdate(migratedTables)
     } catch (error) {
       console.error("Failed to refresh tables:", error)
     } finally {

@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin } from "@/lib/api"
+import { applySchemaListMigration } from "@/lib/schema-migration"
 import { DatabaseSection } from "./database/database-section"
 import { AdminsSection } from "./admins/admins-section"
 import { SettingsSection } from "./settings/settings-section"
@@ -159,7 +160,8 @@ export function AdminDashboard() {
         tablesArray = tablesData.data
       }
 
-      setTables(tablesArray)
+      const migratedTables = await applySchemaListMigration(apiClient, tablesArray)
+      setTables(migratedTables)
     } catch (error) {
       console.error("Failed to load data:", error)
     } finally {
