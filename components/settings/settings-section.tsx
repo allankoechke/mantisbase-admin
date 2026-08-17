@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import type { ApiClient, AppSettings } from "@/lib/api"
+import { SYS_SETTINGS_CONFIG_API, type ApiClient, type AppSettings } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useAppState, type AppMode } from "@/lib/app-state"
 
@@ -108,7 +108,7 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
 
     setIsLoading({ ...isLoading, [cardType]: true })
     try {
-      const updatedSettings = await apiClient.call<AppSettings>("/api/v1/settings/config", {
+      const updatedSettings = await apiClient.call<AppSettings>(SYS_SETTINGS_CONFIG_API, {
         method: "PATCH",
         body: JSON.stringify(formData),
       })
@@ -141,7 +141,7 @@ export function SettingsSection({ apiClient, settings, onSettingsUpdate, onModeC
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      const updatedSettings = await apiClient.call<AppSettings>("/api/v1/settings/config")
+      const updatedSettings = await apiClient.call<AppSettings>(SYS_SETTINGS_CONFIG_API)
 
       // If the request failed, throw the error here 
       if (updatedSettings?.error?.length > 0) throw updatedSettings.error

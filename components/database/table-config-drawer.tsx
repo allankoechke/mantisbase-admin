@@ -34,7 +34,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import type { ApiClient, TableMetadata, ForeignKeyConfig } from "@/lib/api"
 import { dataTypes } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
-import { useRouter } from "@/lib/router"
+import { useNavigate } from "react-router-dom"
+import { ROUTES } from "@/lib/routes"
 
 
 import { cn } from "@/lib/utils"
@@ -89,7 +90,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const { toast } = useToast()
-  const { navigate } = useRouter()
+  const navigate = useNavigate()
 
   // Get unique key for field (use id if exists, otherwise generate one)
   const getFieldKey = (field: any, index: number) => field.id || `temp-${index}`
@@ -407,7 +408,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       })
 
       // Navigate to entities list or another entity
-      navigate("/entities", undefined, undefined)
+      navigate(ROUTES.entities)
       onClose()
     } catch (error: any) {
       toast({

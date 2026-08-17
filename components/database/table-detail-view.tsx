@@ -15,7 +15,7 @@ import { EditItemDrawer } from "./edit-item-drawer"
 import { AddItemDrawer } from "./add-item-drawer"
 import { ColumnVisibilityDropdown } from "./column-visibility-dropdown"
 import { useToast } from "@/hooks/use-toast"
-import { useRouter } from "@/lib/router"
+import { useSearchParams } from "react-router-dom"
 
 interface TableDetailViewProps {
   table: TableMetadata
@@ -41,22 +41,21 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     table.schema.fields?.map((field) => field.name) || [],
   )
   const [isDeleting, setIsDeleting] = React.useState(false)
-  const { route, navigate } = useRouter()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { toast } = useToast()
   
-  // Initialize filter from query params
-  const initialFilter = route.queryParams.filter || ""
+  const initialFilter = searchParams.get("filter") || ""
   const [filterTerm, setFilterTerm] = React.useState(initialFilter)
   const [appliedFilter, setAppliedFilter] = React.useState(initialFilter)
 
   // Sync filter with query params
   React.useEffect(() => {
-    const filterFromQuery = route.queryParams.filter || ""
+    const filterFromQuery = searchParams.get("filter") || ""
     if (filterFromQuery !== appliedFilter) {
       setAppliedFilter(filterFromQuery)
       setFilterTerm(filterFromQuery)
     }
-  }, [route.queryParams.filter])
+  }, [searchParams, appliedFilter])
 
   // Clear data and reset state when switching entities
   React.useEffect(() => {
@@ -74,8 +73,8 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     setIsViewType(table.schema.type === "view")
     
     // Clear filter from URL when switching entities (if filter exists in query params)
-    if (route.queryParams.filter) {
-      navigate("/entities/:name", { name: table.schema.name }, {})
+    if (searchParams.get("filter")) {
+      setSearchParams({}, { replace: true })
     }
     
     // Load new data after clearing - this will use the reset values (page 1, empty filter)
@@ -144,11 +143,13 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
 
   const handleFilter = () => {
     setAppliedFilter(filterTerm)
-    setCurrentPage(1) // Reset to first page when filtering
-    
-    // Update URL with filter query param
-    const queryParams: Record<string, string> = filterTerm ? { filter: filterTerm } : {}
-    navigate("/entities/:name", { name: table.schema.name }, queryParams)
+    setCurrentPage(1)
+
+    const nextParams = new URLSearchParams()
+    if (filterTerm) {
+      nextParams.set("filter", filterTerm)
+    }
+    setSearchParams(nextParams, { replace: true })
   }
 
   const handleFilterKeyPress = (e: React.KeyboardEvent) => {
@@ -332,7 +333,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
               onClick={() => {
                 setFilterTerm("")
                 setAppliedFilter("")
-                navigate("/entities/:name", { name: table.schema.name }, {})
+                setSearchParams({}, { replace: true })
               }}
               className="h-6 text-xs"
             >

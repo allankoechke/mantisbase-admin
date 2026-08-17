@@ -39,16 +39,13 @@ import { LogsSection } from "./logs/logs-section"
 import { SyncSection } from "./sync/sync-section"
 import { useToast } from "@/hooks/use-toast"
 import { ThemeToggle } from "./theme-toggle"
-import { useRouter } from "@/lib/router"
+import { useNavigate, useLocation } from "react-router-dom"
+import { useAuth } from "@/lib/auth"
+import { getDashboardSection, ROUTES } from "@/lib/routes"
 import { useAppState, type AppMode } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 
-interface AdminDashboardProps {
-  token: string
-  onLogout: () => void
-}
-
-export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
+export function AdminDashboard() {
   const [mounted, setMounted] = React.useState(false)
   const [tables, setTables] = React.useState<TableMetadata[]>([])
   const [admins, setAdmins] = React.useState<Admin[]>([])
@@ -57,7 +54,9 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   const [authErrorDialog, setAuthErrorDialog] = React.useState(false)
   const [authErrorReason, setAuthErrorReason] = React.useState("") // Auth error reason
   const { toast } = useToast()
-  const { route, navigate } = useRouter()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { logout } = useAuth()
   const { mode } = useAppState()
 
   const showError = React.useCallback(
@@ -99,7 +98,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }, [])
 
   const [apiClient, setApiClient] = React.useState(
-    () => new ApiClient(token || "", handleUnauthorized, showError),
+    () => new ApiClient(handleUnauthorized, showError),
   )
 
   React.useEffect(() => {
@@ -109,9 +108,9 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   // Update API client when mode or settings change
   React.useEffect(() => {
-    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
+    const newApiClient = new ApiClient(handleUnauthorized, showError)
     setApiClient(newApiClient)
-  }, [token, handleUnauthorized, showError])
+  }, [handleUnauthorized, showError])
 
   const loadAdmins = React.useCallback(async () => {
     if (!apiClient) return
@@ -139,13 +138,10 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   // Load admins when navigating to the admins page
   React.useEffect(() => {
-    // Check if we're on the admins page
-    const pathParts = route.path.split("/").filter(Boolean)
-    const section = pathParts[0] || "entities"
-    if (section === "admins") {
+    if (getDashboardSection(location.pathname) === "admins") {
       loadAdmins()
     }
-  }, [route.path, loadAdmins])
+  }, [location.pathname, loadAdmins])
 
   const loadData = async () => {
     // Set default settings if loading fails
@@ -185,10 +181,10 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }
 
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
-      localStorage.removeItem("admin_token")
-      onLogout()
+      await logout()
+      navigate(ROUTES.login, { replace: true })
     } catch (error) {
       console.warn("Failed to logout:", error)
     }
@@ -213,7 +209,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   const handleModeChange = (newMode: AppMode, baseUrl?: string) => {
     // Update API client when mode changes (mode is handled via app state)
-    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
+    const newApiClient = new ApiClient(handleUnauthorized, showError)
     setApiClient(newApiClient)
 
     // Reload data with new mode
@@ -225,41 +221,29 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
       title: "Entities",
       icon: Table,
       id: "entities",
-      path: "/entities",
+      path: ROUTES.entities,
     },
     {
       title: "Logs",
       icon: FileText,
       id: "logs",
-      path: "/logs",
+      path: ROUTES.logs,
     },
     {
       title: "Admins",
       icon: Shield,
       id: "admins",
-      path: "/admins",
+      path: ROUTES.admins,
     },
     {
       title: "Settings",
       icon: Settings,
       id: "settings",
-      path: "/settings",
+      path: ROUTES.settings,
     },
   ]
 
-  // Extract the section from the route path safely
-  const getCurrentSection = () => {
-    try {
-      // Handle route patterns like "/entities/:name" -> "entities"
-      const pathParts = route.path.split("/").filter(Boolean)
-      return pathParts[0] || "entities"
-    } catch (error) {
-      console.warn("Error parsing route:", error)
-      return "entities"
-    }
-  }
-
-  const currentSection = getCurrentSection()
+  const currentSection = getDashboardSection(location.pathname)
 
   if (!mounted) {
     return (
@@ -291,13 +275,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <SidebarMenuButton
-                          onClick={() => {
-                            try {
-                              navigate(item.path, undefined, undefined)
-                            } catch (error) {
-                              console.warn("Failed to navigate:", error)
-                            }
-                          }}
+                          onClick={() => navigate(item.path)}
                           isActive={currentSection === item.id}
                           style={{ height: "4rem", minHeight: "4rem" }}
                           className={cn(

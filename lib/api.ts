@@ -71,6 +71,12 @@ export interface Admin {
 /** System admin REST API (list, CRUD). Login: `${SYS_ADMINS_API}/login`. */
 export const SYS_ADMINS_API = "/api/v1/sys/admins" as const
 
+/** Application settings (GET/PATCH). */
+export const SYS_SETTINGS_CONFIG_API = "/api/v1/sys/settings/config" as const
+
+/** HttpOnly cookie name set by the MantisBase backend on admin login/refresh; cleared on logout. */
+export const ADMIN_SESSION_COOKIE = "admin_token" as const
+
 /** Backend API base URL. Override with NEXT_PUBLIC_MANTIS_BASE_URL (e.g. https://api.example.com) to use an external backend. */
 export function getApiBaseUrl(): string {
   const override = process.env.NEXT_PUBLIC_MANTIS_BASE_URL
@@ -112,17 +118,31 @@ interface ApiResponse<T> {
   status: number
 }
 
+function buildRequestHeaders(body: BodyInit | null | undefined, bearerToken?: string): Record<string, string> {
+  const headers: Record<string, string> = {}
+
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`
+  }
+
+  if (!(body instanceof FormData)) {
+    headers["Content-Type"] = "application/json"
+  }
+
+  return headers
+}
+
 export class ApiClient {
-  private token: string
+  private bearerToken?: string
   private onUnauthorized: (error: string) => void
   private onError?: (error: string, type?: "error" | "warning") => void
 
   constructor(
-    token: string,
     onUnauthorized: (reason?: string | "") => void,
     onError?: (error: string, type?: "error" | "warning") => void,
+    bearerToken?: string,
   ) {
-    this.token = token
+    this.bearerToken = bearerToken
     this.onUnauthorized = onUnauthorized
     this.onError = onError
   }
@@ -130,18 +150,15 @@ export class ApiClient {
   private async realApiCall<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     try {
       const url = `${getApiBaseUrl()}${endpoint}`
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${this.token}`,
-      };
-
-      // only set content-type if body is not FormData
-      if (!(options.body instanceof FormData)) {
-        headers["Content-Type"] = "application/json";
-      }
+      const headers = buildRequestHeaders(options.body, this.bearerToken)
 
       const response = await fetch(url, {
         ...options,
-        headers,
+        credentials: "include",
+        headers: {
+          ...headers,
+          ...(options.headers as Record<string, string> | undefined),
+        },
       })
 
       // DELETE or No Content
@@ -229,7 +246,6 @@ export class ApiClient {
 }
 
 export interface LoginResponse {
-  token: string
   user: Admin
 }
 
@@ -240,6 +256,7 @@ export async function loginWithPassword(
   try {
     const response = await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}/login`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         identity: email,
@@ -255,22 +272,51 @@ export async function loginWithPassword(
       throw new Error("Invalid response from server")
     }
 
-    // Handle response structure: { status, data: { token, user }, error }
-    if (responseData.status === 200 && responseData.data && responseData.data.token) {
+    // Session cookie is set by the backend via Set-Cookie; JS must not read or store the token.
+    if (responseData.status === 200 && responseData.data?.user) {
       return {
-        token: responseData.data.token,
-        user: responseData.data.user
+        user: responseData.data.user,
       }
-    } else {
-      // Handle error response
-      const errorMessage = responseData.error || responseData.message || "Login failed"
-      throw new Error(errorMessage)
     }
+
+    const errorMessage = responseData.error || responseData.message || "Login failed"
+    throw new Error(errorMessage)
   } catch (error: any) {
     // Re-throw if it's already an Error with a message
     if (error instanceof Error) {
       throw error
     }
     throw new Error(error.message || "Network error occurred")
+  }
+}
+
+export async function checkAuthSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}`, {
+      method: "GET",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    })
+
+    if (response.status === 401 || response.status === 403) {
+      return false
+    }
+
+    const responseData = await response.json()
+    return responseData.status === 200
+  } catch {
+    return false
+  }
+}
+
+export async function logoutSession(): Promise<void> {
+  try {
+    await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    })
+  } catch (error) {
+    console.warn("Failed to clear admin session cookie:", error)
   }
 }

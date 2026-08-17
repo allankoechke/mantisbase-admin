@@ -36,7 +36,8 @@ import type { ApiClient, TableMetadata } from "@/lib/api"
 import { AddTableDialog } from "./add-table-dialog"
 import { TableDetailView } from "./table-detail-view"
 import { TableDocsDrawer } from "./table-docs-drawer"
-import { useRouter } from "@/lib/router"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { entityDetailPath, ROUTES } from "@/lib/routes"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
@@ -47,11 +48,12 @@ interface DatabaseSectionProps {
 }
 
 export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseSectionProps) {
-  const { route, navigate } = useRouter()
+  const { name: entityNameParam } = useParams<{ name?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const { toast } = useToast()
 
-  // Initialize search term from query params
-  const initialFilter = route.queryParams.filter || ""
+  const initialFilter = searchParams.get("filter") || ""
   const [searchTerm, setSearchTerm] = React.useState(initialFilter)
   const [editingTable, setEditingTable] = React.useState<TableMetadata | null>(null)
   const [searchExpanded, setSearchExpanded] = React.useState(false)
@@ -73,30 +75,32 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
 
   // Sync search term with query params
   React.useEffect(() => {
-    const filterFromQuery = route.queryParams.filter || ""
+    const filterFromQuery = searchParams.get("filter") || ""
     if (filterFromQuery !== searchTerm) {
       setSearchTerm(filterFromQuery)
     }
-  }, [route.queryParams.filter])
+  }, [searchParams])
 
   // Update URL when search term changes (debounced)
   React.useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (route.path === "/entities" || route.path === "/entities/:name") {
-    const queryParams: Record<string, string> = searchTerm ? { filter: searchTerm } : {}
-    if (route.pathParams.name) {
-      navigate("/entities/:name", { name: route.pathParams.name }, queryParams)
-    } else {
-      navigate("/entities", undefined, queryParams)
-    }
+      const nextParams = new URLSearchParams(searchParams)
+      if (searchTerm) {
+        nextParams.set("filter", searchTerm)
+      } else {
+        nextParams.delete("filter")
       }
-    }, 300) // Debounce for 300ms
+
+      if (nextParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextParams, { replace: true })
+      }
+    }, 300)
 
     return () => clearTimeout(timeoutId)
-  }, [searchTerm, route.path, route.pathParams.name])
+  }, [searchTerm, searchParams, setSearchParams])
 
-  // Get selected entity name from path params
-  const selectedEntityName = route.pathParams.name || null
+  // Get selected entity name from route params
+  const selectedEntityName = entityNameParam || null
 
   const filteredTables = Array.isArray(tables) ? tables?.filter((table) => table?.schema?.name?.toLowerCase().includes(searchTerm.toLowerCase())) : []
 
@@ -179,11 +183,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
   }
 
   const handleEntityClick = (entityName: string) => {
-    try {
-      navigate("/entities/:name", { name: entityName })
-    } catch (error) {
-      console.warn("Failed to navigate to entity:", error)
-    }
+    navigate(entityDetailPath(entityName))
   }
 
   const handleRefresh = async () => {
@@ -342,13 +342,7 @@ export function DatabaseSection({ apiClient, tables, onTablesUpdate }: DatabaseS
         {selectedEntity ? (
           <TableDetailView
             table={selectedEntity}
-            onBack={() => {
-              try {
-                navigate("/entities", undefined, undefined)
-              } catch (error) {
-                console.warn("Failed to navigate back:", error)
-              }
-            }}
+            onBack={() => navigate(ROUTES.entities)}
             apiClient={apiClient}
             onTableUpdate={(updatedTable) => {
               const updatedTables = tables.map((t) => (t.id === updatedTable.id ? updatedTable : t))

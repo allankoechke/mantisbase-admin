@@ -32,9 +32,9 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
 
   const apiClient = React.useMemo(() => {
     return new ApiClient(
-      token,
       () => {},
-      (error) => setError(error)
+      (error) => setError(error),
+      token,
     )
   }, [token])
 
