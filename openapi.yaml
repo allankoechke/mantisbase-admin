@@ -10,12 +10,13 @@ info:
     admin-only empty mode) — not every route requires a Bearer token.
 
     **Credentials:** send JWTs or API keys (`mb_sk_...`) in the standard header:
-    `Authorization: Bearer <token>`.
+    `Authorization: Bearer <token>`. Admin dashboard sessions use HttpOnly cookies instead.
 
     **Response envelope:** most JSON endpoints return `{ "status", "data", "error" }`.
     The health check is an exception (`{ "status": "OK" }`).
 
-    Generated from route registrations in `src/core/` and `doc/api.md` / `doc/auth.md`.
+    This file is maintained alongside the [mantisbase-admin](https://github.com/allankoechke/mantisbase-admin)
+    dashboard, which also exposes in-app API documentation for schemas and entities.
   license:
     name: MIT
     url: https://github.com/allankoechke/mantisbase/blob/main/LICENSE
