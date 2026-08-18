@@ -106,6 +106,11 @@ export function entityApiKeysApi(entityName: string): string {
   return `/api/v1/auth/${encodeURIComponent(entityName)}/api-keys`
 }
 
+/** Build URL to download or display an uploaded entity file. */
+export function buildEntityFileUrl(entityName: string, fileName: string): string {
+  return `${getApiBaseUrl()}/api/v1/files/${encodeURIComponent(entityName)}/${encodeURIComponent(fileName)}`
+}
+
 export interface AdminApiKeyUpdateRequest {
   label?: string
   expires_at?: string | null

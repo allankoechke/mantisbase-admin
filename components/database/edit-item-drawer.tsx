@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/drawer"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ApiClient, TableMetadata, getApiBaseUrl, TableField } from "@/lib/api"
+import { ApiClient, TableMetadata, TableField, buildEntityFileUrl } from "@/lib/api"
 import { formatFieldTypeDisplay, isNumericFieldType } from "@/lib/field-types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -58,7 +58,7 @@ const FilePreviewField = ({
 
   const getFileUrl = (file: File | string): string => {
     if (typeof file === "string") {
-      return `${getApiBaseUrl()}/api/files/${table.schema.name}/${encodeURIComponent(file)}`;
+      return buildEntityFileUrl(table.schema.name, file);
     }
     return URL.createObjectURL(file); // for newly selected files
   };

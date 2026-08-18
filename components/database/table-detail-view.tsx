@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ApiClient, TableMetadata, entityApiKeysApi, getApiBaseUrl } from "@/lib/api"
+import { ApiClient, TableMetadata, buildEntityFileUrl, entityApiKeysApi } from "@/lib/api"
 import { toApiKeyUsers } from "@/lib/entity-users"
 import { ApiKeysPanel, openCreateApiKeyDialog } from "@/components/api-keys/api-keys-panel"
 import { TableConfigDrawer } from "./table-config-drawer"
@@ -261,7 +261,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
         return (
           <div className="flex gap-2 flex-wrap">
             {filenames.map((filename: string, i: number) => {
-              const url = `${getApiBaseUrl()}/api/files/${table.schema.name}/${encodeURIComponent(filename)}`;
+              const url = buildEntityFileUrl(table.schema.name, filename);
               const ext = filename.split(".").pop()?.toLowerCase() || "";
 
               const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
