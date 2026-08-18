@@ -23,7 +23,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import type { ApiClient, TableMetadata, TableField, ForeignKeyConfig } from "@/lib/api"
-import { dataTypes } from "@/lib/constants"
+import { dataTypes, intPrecisions, DEFAULT_INT_PRECISION } from "@/lib/constants"
+import {
+  appendPrecisionToFieldPayload,
+  applyFieldTypeChange,
+  normalizeFieldTypeForEditor,
+} from "@/lib/field-types"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { formatConstraintDefaultForInput, normalizeConstraintsForFieldType } from "@/lib/schema-constraints"
@@ -44,6 +49,7 @@ interface Field {
   id?: string  // Optional - missing/empty means new field
   name: string
   type: string
+  precision?: string | null
   primary_key: boolean
   nullable: boolean
   unique?: boolean
@@ -59,10 +65,12 @@ interface Field {
 }
 
 function tableFieldToField(tf: TableField): Field {
+  const normalized = normalizeFieldTypeForEditor(tf)
   return {
     id: tf.id,
     name: tf.name,
-    type: tf.type,
+    type: normalized.type,
+    precision: normalized.precision,
     primary_key: tf.primary_key,
     nullable: !tf.required,
     unique: tf.unique ?? false,
@@ -242,9 +250,10 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
   const addField = () => {
     setFields([
       ...fields,
-      {
+        {
         name: "",
         type: "string",
+        precision: null,
         primary_key: false,
         nullable: true,
         system: false,
@@ -280,18 +289,26 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
     setFields((prevFields) =>
       prevFields.map((field, index) => {
         const currentKey = field.id || `temp-${index}`
-        if (currentKey === fieldKey) {
-          // Handle constraints updates
-          if (updates.constraints) {
-            return {
-              ...field,
-              ...updates,
-              constraints: { ...field.constraints, ...updates.constraints }
-            }
-          }
-          return { ...field, ...updates }
+        if (currentKey !== fieldKey) {
+          return field
         }
-        return field
+
+        let nextField = { ...field, ...updates }
+        if (updates.type !== undefined) {
+          const typeUpdate = applyFieldTypeChange(field.type, updates.type, field.precision)
+          nextField = {
+            ...nextField,
+            type: typeUpdate.type,
+            precision: typeUpdate.precision,
+          }
+        }
+        if (updates.constraints) {
+          nextField = {
+            ...nextField,
+            constraints: { ...field.constraints, ...updates.constraints },
+          }
+        }
+        return nextField
       }),
     )
   }
@@ -377,6 +394,15 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
             setIsLoading(false)
             return
           }
+          if (field.type === "int" && !field.precision) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: `Field "${field.name || 'unnamed'}" must have an integer precision selected.`,
+            })
+            setIsLoading(false)
+            return
+          }
         }
       }
 
@@ -390,7 +416,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
           return field.name.trim() && field.type && field.type.trim()
         })
         for (const field of candidateFields) {
-          const normalized = normalizeConstraintsForFieldType(field.type, field.constraints)
+          const normalized = normalizeConstraintsForFieldType(field.type, field.constraints, field.precision)
           if (!normalized.ok) {
             toast({
               variant: "destructive",
@@ -409,6 +435,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
             system: field.system || false,
             constraints: normalized.constraints,
           }
+          appendPrecisionToFieldPayload(fieldData, field)
           if (field.id && field.id.startsWith("mbf_")) {
             fieldData.id = field.id
           }
@@ -600,7 +627,7 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
                                 className={field.system ? "bg-muted" : ""}
                               />
                             </div>
-                            <div>
+                            <div className={field.type === "int" ? "grid grid-cols-2 gap-2" : ""}>
                               <Select
                                 value={field.type}
                                 onValueChange={(value) => updateField(fieldKey, { type: value })}
@@ -617,6 +644,24 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
                                   ))}
                                 </SelectContent>
                               </Select>
+                              {field.type === "int" && (
+                                <Select
+                                  value={field.precision ?? DEFAULT_INT_PRECISION}
+                                  onValueChange={(value) => updateField(fieldKey, { precision: value })}
+                                  disabled={field.system}
+                                >
+                                  <SelectTrigger className={field.system ? "bg-muted" : ""}>
+                                    <SelectValue placeholder="Precision" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {intPrecisions.map((precision) => (
+                                      <SelectItem key={precision} value={precision}>
+                                        {precision}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
                             </div>
                           </div>
                           {!field.system && (

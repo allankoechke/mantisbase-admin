@@ -1,9 +1,5 @@
 "use client"
 
-import type { AppMode } from "./app-state"
-
-
-// Updated interfaces to match the API response format
 export interface FieldConstraints {
   default_value: any
   max_value: number | null
@@ -25,6 +21,7 @@ export interface TableField {
   required: boolean
   system: boolean
   type: string
+  precision?: string | null
   unique: boolean
   constraints: FieldConstraints
   foreign_key?: ForeignKeyConfig // optional foreign key configuration
@@ -71,6 +68,158 @@ export interface Admin {
 /** System admin REST API (list, CRUD). Login: `${SYS_ADMINS_API}/login`. */
 export const SYS_ADMINS_API = "/api/v1/sys/admins" as const
 
+/** Application settings (GET/PATCH). */
+export const SYS_SETTINGS_CONFIG_API = "/api/v1/sys/settings/config" as const
+
+/** Admin API keys (list, create, update, revoke). */
+export const SYS_API_KEYS_API = "/api/v1/sys/api-keys" as const
+
+/** OAuth provider registry (list, create, update, remove). */
+export const SYS_OAUTH_PROVIDERS_API = "/api/v1/sys/oauth/providers" as const
+
+/** Enable or disable OAuth providers per auth entity. */
+export const SYS_OAUTH_ENTITY_CONFIG_API = "/api/v1/sys/oauth/entity-config" as const
+
+export interface AdminApiKey {
+  id: string
+  entity_name: string
+  user_id: string
+  label: string
+  permissions: unknown[]
+  last_used: string | null
+  created: string
+  expires_at: string | null
+}
+
+export interface AdminApiKeyCreated extends AdminApiKey {
+  key: string
+}
+
+export interface AdminApiKeyCreateRequest {
+  user_id: string
+  label?: string
+  permissions?: unknown[]
+  expires_at?: string
+}
+
+export interface ApiKeyUser {
+  id: string
+  label: string
+}
+
+/** Entity auth user API keys (list, create, revoke). */
+export function entityApiKeysApi(entityName: string): string {
+  return `/api/v1/auth/${encodeURIComponent(entityName)}/api-keys`
+}
+
+/** OAuth providers enabled for an auth entity (public list). */
+export function entityOAuthProvidersApi(entityName: string): string {
+  return `/api/v1/auth/${encodeURIComponent(entityName)}/oauth/providers`
+}
+
+/** Provider row from GET /auth/{entity}/oauth/providers (includes entity enablement). */
+export interface EntityOAuthProvider {
+  id: string
+  name: string
+  client_id?: string
+  enabled?: boolean
+  enabled_for_entity?: boolean
+  [key: string]: unknown
+}
+
+export interface OAuthProvider {
+  id: string
+  name: string
+  client_id?: string
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+export interface OAuthProviderCreateRequest {
+  name: string
+  client_id: string
+  client_secret: string
+}
+
+export interface OAuthProviderUpdateRequest {
+  name?: string
+  client_id?: string
+  client_secret?: string
+}
+
+export interface OAuthEntityConfigRequest {
+  entity_name: string
+  provider_id: string
+}
+
+export interface OAuthEntityConfigResult {
+  entity_name: string
+  provider_id: string
+  enabled: boolean
+}
+
+/** Resolve provider UUID used in entity-config requests. */
+export function getOAuthProviderId(provider: { id?: string; provider_id?: string }): string {
+  return provider.id ?? provider.provider_id ?? ""
+}
+
+/** Build URL to download or display an uploaded entity file. */
+export function buildEntityFileUrl(entityName: string, fileName: string): string {
+  return `${getApiBaseUrl()}/api/v1/files/${encodeURIComponent(entityName)}/${encodeURIComponent(fileName)}`
+}
+
+export interface AdminApiKeyUpdateRequest {
+  label?: string
+  expires_at?: string | null
+}
+
+/** Extract list items from direct arrays or paginated API responses. */
+export function extractListItems<T>(response: unknown): T[] {
+  if (Array.isArray(response)) {
+    return response
+  }
+
+  if (response && typeof response === "object") {
+    const record = response as Record<string, unknown>
+    if (Array.isArray(record.items)) {
+      return record.items as T[]
+    }
+
+    const data = record.data
+    if (Array.isArray(data)) {
+      return data as T[]
+    }
+    if (data && typeof data === "object") {
+      const nested = data as Record<string, unknown>
+      if (Array.isArray(nested.items)) {
+        return nested.items as T[]
+      }
+    }
+  }
+
+  return []
+}
+
+/** Detect error objects returned by ApiClient.call's catch handler. */
+export function getApiClientError(response: unknown): string | null {
+  if (!response || typeof response !== "object") {
+    return null
+  }
+
+  const record = response as { error?: unknown; status?: unknown }
+  if (typeof record.error === "string" && record.error.length > 0) {
+    const status = typeof record.status === "number" ? record.status : 0
+    if (status >= 400 || status <= 0) {
+      return record.error
+    }
+  }
+
+  return null
+}
+
+/** HttpOnly cookie name set by the MantisBase backend on admin login/refresh; cleared on logout. */
+export const ADMIN_SESSION_COOKIE = "admin_token" as const
+
 /** Backend API base URL. Override with NEXT_PUBLIC_MANTIS_BASE_URL (e.g. https://api.example.com) to use an external backend. */
 export function getApiBaseUrl(): string {
   const override = process.env.NEXT_PUBLIC_MANTIS_BASE_URL
@@ -78,31 +227,37 @@ export function getApiBaseUrl(): string {
     return override.replace(/\/+$/, "")
   }
 
-  const mode = process?.env?.NODE_ENV || "production"
-  const port = process?.env?.MANTIS_PORT || 7070
-
-  if (mode === "development") {
-    return `http://localhost:${port}`
-  }
-
   if (typeof window !== "undefined") {
     return window.location.origin
   }
 
-  return `http://localhost:${port}`
+  const port = process?.env?.MANTIS_PORT || 7070
+  return `http://127.0.0.1:${port}`
+}
+
+export interface SmtpConfig {
+  host: string
+  port: number
+  user: string
+  password: string
+  from: string
+  tls: boolean
 }
 
 export interface AppSettings {
-  allowRegistration: boolean
-  appName: string
-  baseUrl: string
+  orgName: string
+  siteDomain: string
+  corsAllowedOrigins: string[]
+  maxFileSize: number
+  logRetentionDays: number
+  disableAdminRegistration: boolean
+  disableSchemaMutations: boolean
   emailVerificationRequired: boolean
-  maintenanceMode: boolean
-  maxFileSize: Number
-  mode: AppMode
-  sessionTimeout: Number
-  adminSessionTimeout: Number
-  mantisVersion: string
+  sessionTimeout: number
+  adminSessionTimeout: number
+  jwtEnableSetIssuer: boolean
+  jwtEnableSetAudience: boolean
+  smtp: SmtpConfig
 }
 
 // API Response interface
@@ -112,17 +267,31 @@ interface ApiResponse<T> {
   status: number
 }
 
+function buildRequestHeaders(body: BodyInit | null | undefined, bearerToken?: string): Record<string, string> {
+  const headers: Record<string, string> = {}
+
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`
+  }
+
+  if (!(body instanceof FormData)) {
+    headers["Content-Type"] = "application/json"
+  }
+
+  return headers
+}
+
 export class ApiClient {
-  private token: string
+  private bearerToken?: string
   private onUnauthorized: (error: string) => void
   private onError?: (error: string, type?: "error" | "warning") => void
 
   constructor(
-    token: string,
     onUnauthorized: (reason?: string | "") => void,
     onError?: (error: string, type?: "error" | "warning") => void,
+    bearerToken?: string,
   ) {
-    this.token = token
+    this.bearerToken = bearerToken
     this.onUnauthorized = onUnauthorized
     this.onError = onError
   }
@@ -130,18 +299,15 @@ export class ApiClient {
   private async realApiCall<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     try {
       const url = `${getApiBaseUrl()}${endpoint}`
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${this.token}`,
-      };
-
-      // only set content-type if body is not FormData
-      if (!(options.body instanceof FormData)) {
-        headers["Content-Type"] = "application/json";
-      }
+      const headers = buildRequestHeaders(options.body, this.bearerToken)
 
       const response = await fetch(url, {
         ...options,
-        headers,
+        credentials: "include",
+        headers: {
+          ...headers,
+          ...(options.headers as Record<string, string> | undefined),
+        },
       })
 
       // DELETE or No Content
@@ -229,7 +395,6 @@ export class ApiClient {
 }
 
 export interface LoginResponse {
-  token: string
   user: Admin
 }
 
@@ -240,6 +405,7 @@ export async function loginWithPassword(
   try {
     const response = await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}/login`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         identity: email,
@@ -255,22 +421,51 @@ export async function loginWithPassword(
       throw new Error("Invalid response from server")
     }
 
-    // Handle response structure: { status, data: { token, user }, error }
-    if (responseData.status === 200 && responseData.data && responseData.data.token) {
+    // Session cookie is set by the backend via Set-Cookie; JS must not read or store the token.
+    if (responseData.status === 200 && responseData.data?.user) {
       return {
-        token: responseData.data.token,
-        user: responseData.data.user
+        user: responseData.data.user,
       }
-    } else {
-      // Handle error response
-      const errorMessage = responseData.error || responseData.message || "Login failed"
-      throw new Error(errorMessage)
     }
+
+    const errorMessage = responseData.error || responseData.message || "Login failed"
+    throw new Error(errorMessage)
   } catch (error: any) {
     // Re-throw if it's already an Error with a message
     if (error instanceof Error) {
       throw error
     }
     throw new Error(error.message || "Network error occurred")
+  }
+}
+
+export async function checkAuthSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}`, {
+      method: "GET",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    })
+
+    if (response.status === 401 || response.status === 403) {
+      return false
+    }
+
+    const responseData = await response.json()
+    return responseData.status === 200
+  } catch {
+    return false
+  }
+}
+
+export async function logoutSession(): Promise<void> {
+  try {
+    await fetch(`${getApiBaseUrl()}${SYS_ADMINS_API}/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    })
+  } catch (error) {
+    console.warn("Failed to clear admin session cookie:", error)
   }
 }

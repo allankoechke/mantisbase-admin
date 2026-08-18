@@ -31,7 +31,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin, type AppSettings } from "@/lib/api"
+import { ApiClient, SYS_ADMINS_API, type TableMetadata, type Admin } from "@/lib/api"
+import { applySchemaListMigration } from "@/lib/schema-migration"
 import { DatabaseSection } from "./database/database-section"
 import { AdminsSection } from "./admins/admins-section"
 import { SettingsSection } from "./settings/settings-section"
@@ -39,26 +40,22 @@ import { LogsSection } from "./logs/logs-section"
 import { SyncSection } from "./sync/sync-section"
 import { useToast } from "@/hooks/use-toast"
 import { ThemeToggle } from "./theme-toggle"
-import { useRouter } from "@/lib/router"
-import { useAppState, type AppMode } from "@/lib/app-state"
+import { useNavigate, useLocation } from "react-router-dom"
+import { useAuth } from "@/lib/auth"
+import { getDashboardSection, ROUTES } from "@/lib/routes"
 import { cn } from "@/lib/utils"
 
-interface AdminDashboardProps {
-  token: string
-  onLogout: () => void
-}
-
-export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
+export function AdminDashboard() {
   const [mounted, setMounted] = React.useState(false)
   const [tables, setTables] = React.useState<TableMetadata[]>([])
   const [admins, setAdmins] = React.useState<Admin[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [settings, setSettings] = React.useState<AppSettings | null>(null)
   const [authErrorDialog, setAuthErrorDialog] = React.useState(false)
   const [authErrorReason, setAuthErrorReason] = React.useState("") // Auth error reason
   const { toast } = useToast()
-  const { route, navigate } = useRouter()
-  const { mode } = useAppState()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { logout, refreshSession } = useAuth()
 
   const showError = React.useCallback(
     (error: string, type: "error" | "warning" = "error") => {
@@ -88,18 +85,22 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     [toast],
   )
 
-  const handleUnauthorized = React.useCallback((reason?: string | "") => {
+  const handleUnauthorized = React.useCallback(async (reason?: string | "") => {
     try {
-      setAuthErrorReason(reason || "")  // Set the auth error string
-      setAuthErrorDialog(true)    // Set the auth dialog to open
-      // Don't call handleLogout() here - let the dialog handle navigation
+      const stillAuthenticated = await refreshSession()
+      if (stillAuthenticated) {
+        return
+      }
+
+      setAuthErrorReason(reason || "")
+      setAuthErrorDialog(true)
     } catch (error) {
       console.warn("Failed to handle unauthorized:", error)
     }
-  }, [])
+  }, [refreshSession])
 
   const [apiClient, setApiClient] = React.useState(
-    () => new ApiClient(token || "", handleUnauthorized, showError),
+    () => new ApiClient(handleUnauthorized, showError),
   )
 
   React.useEffect(() => {
@@ -109,9 +110,9 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   // Update API client when mode or settings change
   React.useEffect(() => {
-    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
+    const newApiClient = new ApiClient(handleUnauthorized, showError)
     setApiClient(newApiClient)
-  }, [token, handleUnauthorized, showError])
+  }, [handleUnauthorized, showError])
 
   const loadAdmins = React.useCallback(async () => {
     if (!apiClient) return
@@ -139,29 +140,12 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
 
   // Load admins when navigating to the admins page
   React.useEffect(() => {
-    // Check if we're on the admins page
-    const pathParts = route.path.split("/").filter(Boolean)
-    const section = pathParts[0] || "entities"
-    if (section === "admins") {
+    if (getDashboardSection(location.pathname) === "admins") {
       loadAdmins()
     }
-  }, [route.path, loadAdmins])
+  }, [location.pathname, loadAdmins])
 
   const loadData = async () => {
-    // Set default settings if loading fails
-    setSettings({
-      appName: "ACME Mantis Project",
-      baseUrl: "http://127.0.0.1:7070",
-      mantisVersion: "0.0.0",
-      maintenanceMode: false,
-      maxFileSize: 10,
-      allowRegistration: true,
-      emailVerificationRequired: false,
-      sessionTimeout: 84000,
-      adminSessionTimeout: 3600,
-      mode: mode,
-    })
-
     try {
       setLoading(true)
 
@@ -176,7 +160,8 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
         tablesArray = tablesData.data
       }
 
-      setTables(tablesArray)
+      const migratedTables = await applySchemaListMigration(apiClient, tablesArray)
+      setTables(migratedTables)
     } catch (error) {
       console.error("Failed to load data:", error)
     } finally {
@@ -185,10 +170,10 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
   }
 
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
-      localStorage.removeItem("admin_token")
-      onLogout()
+      await logout()
+      navigate(ROUTES.login, { replace: true })
     } catch (error) {
       console.warn("Failed to logout:", error)
     }
@@ -211,55 +196,35 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
     }
   }
 
-  const handleModeChange = (newMode: AppMode, baseUrl?: string) => {
-    // Update API client when mode changes (mode is handled via app state)
-    const newApiClient = new ApiClient(token || "", handleUnauthorized, showError)
-    setApiClient(newApiClient)
-
-    // Reload data with new mode
-    loadData()
-  }
 
   const sidebarItems = [
     {
       title: "Entities",
       icon: Table,
       id: "entities",
-      path: "/entities",
+      path: ROUTES.entities,
     },
     {
       title: "Logs",
       icon: FileText,
       id: "logs",
-      path: "/logs",
+      path: ROUTES.logs,
     },
     {
       title: "Admins",
       icon: Shield,
       id: "admins",
-      path: "/admins",
+      path: ROUTES.admins,
     },
     {
       title: "Settings",
       icon: Settings,
       id: "settings",
-      path: "/settings",
+      path: ROUTES.settings,
     },
   ]
 
-  // Extract the section from the route path safely
-  const getCurrentSection = () => {
-    try {
-      // Handle route patterns like "/entities/:name" -> "entities"
-      const pathParts = route.path.split("/").filter(Boolean)
-      return pathParts[0] || "entities"
-    } catch (error) {
-      console.warn("Error parsing route:", error)
-      return "entities"
-    }
-  }
-
-  const currentSection = getCurrentSection()
+  const currentSection = getDashboardSection(location.pathname)
 
   if (!mounted) {
     return (
@@ -291,13 +256,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <SidebarMenuButton
-                          onClick={() => {
-                            try {
-                              navigate(item.path, undefined, undefined)
-                            } catch (error) {
-                              console.warn("Failed to navigate:", error)
-                            }
-                          }}
+                          onClick={() => navigate(item.path)}
                           isActive={currentSection === item.id}
                           style={{ height: "4rem", minHeight: "4rem" }}
                           className={cn(
@@ -392,14 +351,7 @@ export function AdminDashboard({ token, onLogout }: AdminDashboardProps) {
                 )}
                 {currentSection === "logs" && <LogsSection apiClient={apiClient} />}
                 {currentSection === "sync" && <SyncSection />}
-                {currentSection === "settings" && (
-                  <SettingsSection
-                    apiClient={apiClient}
-                    settings={settings}
-                    onSettingsUpdate={setSettings}
-                    onModeChange={handleModeChange}
-                  />
-                )}
+                {currentSection === "settings" && <SettingsSection apiClient={apiClient} />}
               </>
             )}
           </main>

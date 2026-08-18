@@ -32,9 +32,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { ApiClient, TableMetadata, ForeignKeyConfig } from "@/lib/api"
-import { dataTypes } from "@/lib/constants"
+import { dataTypes, intPrecisions, DEFAULT_INT_PRECISION } from "@/lib/constants"
+import {
+  appendPrecisionToFieldPayload,
+  applyFieldTypeChange,
+  normalizeFieldTypeForEditor,
+  schemaFieldsNeedMigration,
+} from "@/lib/field-types"
+import { migrateSchemaFieldsIfNeeded } from "@/lib/schema-migration"
+import { OAuthEntityPanel } from "@/components/oauth/oauth-entity-panel"
 import { useToast } from "@/hooks/use-toast"
-import { useRouter } from "@/lib/router"
+import { useNavigate } from "react-router-dom"
+import { ROUTES } from "@/lib/routes"
 
 
 import { cn } from "@/lib/utils"
@@ -89,7 +98,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const { toast } = useToast()
-  const { navigate } = useRouter()
+  const navigate = useNavigate()
+  const isAuthEntity = table.schema.type === "auth"
 
   // Get unique key for field (use id if exists, otherwise generate one)
   const getFieldKey = (field: any, index: number) => field.id || `temp-${index}`
@@ -97,18 +107,23 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   React.useEffect(() => {
     if (open) {
       // Transform API format (with constraints) to UI format (flat camelCase)
-      const transformedColumns = table.schema?.fields.map(col => ({
-        ...col,
-        old_name: col.name,
-        // Flatten constraints for UI
-        primaryKey: col.primary_key || false,
-        minValue: col.constraints?.min_value || null,
-        maxValue: col.constraints?.max_value || null,
-        defaultValue: col.constraints?.default_value || null,
-        validator: col.constraints?.validator || null,
-        // Include foreign_key if present
-        foreign_key: col.foreign_key,
-      })) || []
+      const transformedColumns = table.schema?.fields.map(col => {
+        const normalized = normalizeFieldTypeForEditor(col)
+        return {
+          ...col,
+          type: normalized.type,
+          precision: normalized.precision,
+          old_name: col.name,
+          // Flatten constraints for UI
+          primaryKey: col.primary_key || false,
+          minValue: col.constraints?.min_value || null,
+          maxValue: col.constraints?.max_value || null,
+          defaultValue: col.constraints?.default_value || null,
+          validator: col.constraints?.validator || null,
+          // Include foreign_key if present
+          foreign_key: col.foreign_key,
+        }
+      }) || []
       setColumns(transformedColumns)
       // Initialize rules with mode and expr from API
       // Convert empty string to "admin" for UI (Select doesn't allow empty string values)
@@ -140,14 +155,37 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       setHasUnsavedChanges(false)
       setExpandedFields(new Set())
       setDeletedColumns([])
+
+      void (async () => {
+        try {
+          const fresh = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`)
+          if ((fresh as { error?: unknown[] })?.error?.length) {
+            return
+          }
+          if (!schemaFieldsNeedMigration(fresh.schema?.fields ?? [])) {
+            return
+          }
+
+          const migrated = await migrateSchemaFieldsIfNeeded(apiClient, fresh)
+          if (migrated) {
+            onTableUpdate(migrated)
+          } else {
+            setHasUnsavedChanges(true)
+          }
+        } catch (error) {
+          console.error("Failed to migrate legacy field types:", error)
+          setHasUnsavedChanges(true)
+        }
+      })()
     }
-  }, [open, table])
+  }, [open, table, apiClient, onTableUpdate])
 
   const addColumn = () => {
     setColumns([...columns, { 
       id: `field-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: "", 
-      type: "string", 
+      type: "string",
+      precision: null,
       primary_key: false,
       primaryKey: false, // UI format
       required: true, 
@@ -201,13 +239,20 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   // Update existing column data
   const updateColumn = (index: number, field: string, value: any) => {
     const updatedColumns = columns.map((col, i) => {
-      if (i === index) {
-        var updated = { ...col }
-        updated[field] = value
-        return updated;
+      if (i !== index) {
+        return col
       }
 
-      return col
+      if (field === "type") {
+        const typeUpdate = applyFieldTypeChange(col.type, value, col.precision)
+        return {
+          ...col,
+          type: typeUpdate.type,
+          precision: typeUpdate.precision,
+        }
+      }
+
+      return { ...col, [field]: value }
     })
 
     setColumns(updatedColumns)
@@ -233,12 +278,22 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           validator:
             col.validator !== undefined ? col.validator : (col.constraints?.validator ?? null),
         }
-        const normalized = normalizeConstraintsForFieldType(col.type, rawConstraints)
+        const normalized = normalizeConstraintsForFieldType(col.type, rawConstraints, col.precision)
         if (!normalized.ok) {
           toast({
             variant: "destructive",
             title: "Invalid constraints",
             description: `${col.name || "Field"}: ${normalized.message}`,
+            duration: 5000,
+          })
+          setIsLoading(false)
+          return
+        }
+        if (col.type === "int" && !col.precision) {
+          toast({
+            variant: "destructive",
+            title: "Invalid field",
+            description: `${col.name || "Field"}: integer fields require a precision.`,
             duration: 5000,
           })
           setIsLoading(false)
@@ -255,6 +310,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           constraints: normalized.constraints,
           ...(col.old_name && { old_name: col.old_name }),
         }
+        appendPrecisionToFieldPayload(fieldData, col)
         if (col.foreign_key && col.foreign_key.entity && col.foreign_key.field) {
           fieldData.foreign_key = col.foreign_key
         }
@@ -282,6 +338,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       if ((updatedTable as any)?.error?.length > 0) throw (updatedTable as any).error
 
       onTableUpdate(updatedTable)
+      setHasUnsavedChanges(false)
       toast({
         title: "Table Updated",
         description: "Table fields updated successfully.",
@@ -407,7 +464,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       })
 
       // Navigate to entities list or another entity
-      navigate("/entities", undefined, undefined)
+      navigate(ROUTES.entities)
       onClose()
     } catch (error: any) {
       toast({
@@ -447,15 +504,16 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <DrawerDescription>Manage table schema and access control rules</DrawerDescription>
+          <DrawerDescription>Manage entity fields, OAuth providers, and access control rules</DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="p-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="schema">Schema</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 mb-6">
+                  <TabsTrigger value="schema">Fields</TabsTrigger>
+                  <TabsTrigger value="oauth">OAuth</TabsTrigger>
                   <TabsTrigger value="rules">Access Rules</TabsTrigger>
                 </TabsList>
 
@@ -503,7 +561,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                     className={isSystem ? "bg-muted" : ""}
                                   />
                                 </div>
-                                <div>
+                                <div className={column.type === "int" ? "grid grid-cols-2 gap-2" : ""}>
                                   <Select
                                     value={column.type}
                                     onValueChange={(value) => updateColumn(index, "type", value)}
@@ -520,6 +578,24 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                                       ))}
                                     </SelectContent>
                                   </Select>
+                                  {column.type === "int" && (
+                                    <Select
+                                      value={column.precision ?? DEFAULT_INT_PRECISION}
+                                      onValueChange={(value) => updateColumn(index, "precision", value)}
+                                      disabled={isSystem}
+                                    >
+                                      <SelectTrigger className={isSystem ? "bg-muted" : ""}>
+                                        <SelectValue placeholder="Precision" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {intPrecisions.map((precision) => (
+                                          <SelectItem key={precision} value={precision}>
+                                            {precision}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
                                 </div>
                               </div>
                               {!isSystem && (
@@ -806,6 +882,23 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                   )}
                 </TabsContent>
 
+                <TabsContent value="oauth" className="space-y-6">
+                  {isAuthEntity ? (
+                    <OAuthEntityPanel
+                      entityName={table.schema.name}
+                      apiClient={apiClient}
+                      isActive={open && activeTab === "oauth"}
+                    />
+                  ) : (
+                    <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      <p>
+                        OAuth is only available for <strong className="text-foreground">auth</strong>-type entities.
+                        Change this entity&apos;s type to auth to enable OAuth login and account linking.
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+
                 <TabsContent value="rules" className="space-y-6">
                   <div>
                     <h4 className="text-lg font-medium mb-2">Access Control Rules</h4>
@@ -1059,13 +1152,15 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
               Delete Entity
             </Button>
           )}
-          <Button
-            onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
-            disabled={isLoading}
-            className="w-full sm:flex-1"
-          >
-            {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Schema" : "Rules"}`}
-          </Button>
+          {activeTab !== "oauth" && (
+            <Button
+              onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
+              disabled={isLoading}
+              className="w-full sm:flex-1"
+            >
+              {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Fields" : "Rules"}`}
+            </Button>
+          )}
         </DrawerFooter>
 
         {/* Delete Confirmation Dialog */}

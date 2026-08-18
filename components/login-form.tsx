@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { loginWithPassword } from "@/lib/api"
 
 const DEMO_EMAIL = "test@test.com"
 const DEMO_PASSWORD = "123456789"
@@ -22,7 +21,7 @@ function isDemoMode(): boolean {
 }
 
 interface LoginFormProps {
-  onLogin: (token: string) => void
+  onLogin: (email: string, password: string) => Promise<void>
 }
 
 export function LoginForm({ onLogin }: LoginFormProps) {
@@ -39,9 +38,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     setError("")
 
     try {
-      const data = await loginWithPassword(email, password)
-      localStorage.setItem("admin_token", data.token)
-      onLogin(data.token)
+      await onLogin(email, password)
     } catch (err: any) {
       setError(err.message || "Invalid email or password")
     } finally {

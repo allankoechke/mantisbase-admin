@@ -18,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ApiClient, TableMetadata, TableField } from "@/lib/api"
+import { isNumericFieldType } from "@/lib/field-types"
 import { Badge } from "../ui/badge"
 import { useToast } from "@/hooks/use-toast"
 
@@ -161,8 +162,10 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
       switch (type) {
         case "string":
         case "xml":
+        case "blob":
           return String(value);
 
+        case "int":
         case "int8":
         case "int16":
         case "int32":
@@ -227,23 +230,7 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
     }
   }
 
-  const isIntegralType = (type: string) => {
-    switch (type) {
-      case "int8":
-      case "int16":
-      case "int32":
-      case "int64":
-      case "uint8":
-      case "uint16":
-      case "uint32":
-      case "uint64":
-      case "double":
-        return true
-
-      default:
-        return false
-    }
-  }
+  const isIntegralType = (type: string) => isNumericFieldType(type)
 
   function formatDateForInput(value: string | Date | number | undefined): string {
     if (value === null || value === undefined || value === "") {

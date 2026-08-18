@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/drawer"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ApiClient, TableMetadata, getApiBaseUrl, TableField } from "@/lib/api"
+import { ApiClient, TableMetadata, TableField, buildEntityFileUrl } from "@/lib/api"
+import { formatFieldTypeDisplay, isNumericFieldType } from "@/lib/field-types"
 import { useToast } from "@/hooks/use-toast"
 
 interface EditItemDrawerProps {
@@ -57,7 +58,7 @@ const FilePreviewField = ({
 
   const getFileUrl = (file: File | string): string => {
     if (typeof file === "string") {
-      return `${getApiBaseUrl()}/api/files/${table.schema.name}/${encodeURIComponent(file)}`;
+      return buildEntityFileUrl(table.schema.name, file);
     }
     return URL.createObjectURL(file); // for newly selected files
   };
@@ -273,6 +274,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
 
     try {
       switch (type) {
+        case "int":
         case "int8":
         case "int16":
         case "int32":
@@ -449,7 +451,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                         disabled={isDisabled}
                         className={`w-full ${isDisabled ? "bg-muted" : ""}`}
                       />
-                    ) : field.type.match(/^int|^uint|double|number$/) ? (
+                    ) : isNumericFieldType(field.type) ? (
                       <Input
                         id={field.name}
                         type="number"
@@ -457,7 +459,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                         onChange={(e) => handleFieldChange(field.name, e.target.value)}
                         disabled={isDisabled}
                         className={`w-full ${isDisabled ? "bg-muted" : ""}`}
-                        placeholder={`Enter '${field.type}' value`}
+                        placeholder={`Enter '${formatFieldTypeDisplay(field)}' value`}
                       />
                     ) : (
                       <Input
