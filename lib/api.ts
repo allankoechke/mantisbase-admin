@@ -74,6 +74,12 @@ export const SYS_SETTINGS_CONFIG_API = "/api/v1/sys/settings/config" as const
 /** Admin API keys (list, create, update, revoke). */
 export const SYS_API_KEYS_API = "/api/v1/sys/api-keys" as const
 
+/** OAuth provider registry (list, create, update, remove). */
+export const SYS_OAUTH_PROVIDERS_API = "/api/v1/sys/oauth/providers" as const
+
+/** Enable or disable OAuth providers per auth entity. */
+export const SYS_OAUTH_ENTITY_CONFIG_API = "/api/v1/sys/oauth/entity-config" as const
+
 export interface AdminApiKey {
   id: string
   entity_name: string
@@ -104,6 +110,57 @@ export interface ApiKeyUser {
 /** Entity auth user API keys (list, create, revoke). */
 export function entityApiKeysApi(entityName: string): string {
   return `/api/v1/auth/${encodeURIComponent(entityName)}/api-keys`
+}
+
+/** OAuth providers enabled for an auth entity (public list). */
+export function entityOAuthProvidersApi(entityName: string): string {
+  return `/api/v1/auth/${encodeURIComponent(entityName)}/oauth/providers`
+}
+
+/** Provider row from GET /auth/{entity}/oauth/providers (includes entity enablement). */
+export interface EntityOAuthProvider {
+  id: string
+  name: string
+  client_id?: string
+  enabled?: boolean
+  enabled_for_entity?: boolean
+  [key: string]: unknown
+}
+
+export interface OAuthProvider {
+  id: string
+  name: string
+  client_id?: string
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+export interface OAuthProviderCreateRequest {
+  name: string
+  client_id: string
+  client_secret: string
+}
+
+export interface OAuthProviderUpdateRequest {
+  name?: string
+  client_id?: string
+  client_secret?: string
+}
+
+export interface OAuthEntityConfigRequest {
+  entity_name: string
+  provider_id: string
+}
+
+export interface OAuthEntityConfigResult {
+  entity_name: string
+  provider_id: string
+  enabled: boolean
+}
+
+/** Resolve provider UUID used in entity-config requests. */
+export function getOAuthProviderId(provider: { id?: string; provider_id?: string }): string {
+  return provider.id ?? provider.provider_id ?? ""
 }
 
 /** Build URL to download or display an uploaded entity file. */

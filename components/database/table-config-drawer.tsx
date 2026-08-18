@@ -40,6 +40,7 @@ import {
   schemaFieldsNeedMigration,
 } from "@/lib/field-types"
 import { migrateSchemaFieldsIfNeeded } from "@/lib/schema-migration"
+import { OAuthEntityPanel } from "@/components/oauth/oauth-entity-panel"
 import { useToast } from "@/hooks/use-toast"
 import { useNavigate } from "react-router-dom"
 import { ROUTES } from "@/lib/routes"
@@ -98,6 +99,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const [isDeleting, setIsDeleting] = React.useState(false)
   const { toast } = useToast()
   const navigate = useNavigate()
+  const isAuthEntity = table.schema.type === "auth"
 
   // Get unique key for field (use id if exists, otherwise generate one)
   const getFieldKey = (field: any, index: number) => field.id || `temp-${index}`
@@ -502,15 +504,16 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <DrawerDescription>Manage table schema and access control rules</DrawerDescription>
+          <DrawerDescription>Manage entity fields, OAuth providers, and access control rules</DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="p-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="schema">Schema</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 mb-6">
+                  <TabsTrigger value="schema">Fields</TabsTrigger>
+                  <TabsTrigger value="oauth">OAuth</TabsTrigger>
                   <TabsTrigger value="rules">Access Rules</TabsTrigger>
                 </TabsList>
 
@@ -879,6 +882,23 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                   )}
                 </TabsContent>
 
+                <TabsContent value="oauth" className="space-y-6">
+                  {isAuthEntity ? (
+                    <OAuthEntityPanel
+                      entityName={table.schema.name}
+                      apiClient={apiClient}
+                      isActive={open && activeTab === "oauth"}
+                    />
+                  ) : (
+                    <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      <p>
+                        OAuth is only available for <strong className="text-foreground">auth</strong>-type entities.
+                        Change this entity&apos;s type to auth to enable OAuth login and account linking.
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+
                 <TabsContent value="rules" className="space-y-6">
                   <div>
                     <h4 className="text-lg font-medium mb-2">Access Control Rules</h4>
@@ -1132,13 +1152,15 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
               Delete Entity
             </Button>
           )}
-          <Button
-            onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
-            disabled={isLoading}
-            className="w-full sm:flex-1"
-          >
-            {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Schema" : "Rules"}`}
-          </Button>
+          {activeTab !== "oauth" && (
+            <Button
+              onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
+              disabled={isLoading}
+              className="w-full sm:flex-1"
+            >
+              {isLoading ? "Saving..." : `Save ${activeTab === "schema" ? "Fields" : "Rules"}`}
+            </Button>
+          )}
         </DrawerFooter>
 
         {/* Delete Confirmation Dialog */}

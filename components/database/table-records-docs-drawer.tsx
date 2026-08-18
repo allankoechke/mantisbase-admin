@@ -341,10 +341,14 @@ ${baseUrl}${authPrefix}/oauth/authorize/google?redirect_uri=https://your-app.com
           <SimpleEndpointDoc
             method="GET"
             endpoint={`${authPrefix}/oauth/providers`}
-            description="List OAuth providers enabled for this entity. No authentication required."
+            description="List all OAuth providers with per-entity status (`enabled_for_entity`). No authentication required."
             requestExample={`curl "${baseUrl}${authPrefix}/oauth/providers"`}
             responseExample={JSON.stringify(
-              { status: 200, data: [{ name: "google", enabled: true }], error: "" },
+              {
+                status: 200,
+                data: [{ id: "019c1b81-364b-7000-8120-b5416b2c42c2", name: "google", enabled: true, enabled_for_entity: true }],
+                error: "",
+              },
               null,
               2,
             )}

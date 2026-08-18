@@ -407,7 +407,11 @@ paths:
   /auth/{entity_name}/oauth/providers:
     get:
       tags: [Auth]
-      summary: List OAuth providers enabled for entity
+      summary: List OAuth providers for entity
+      description: |
+        Returns all globally registered OAuth providers with per-entity status.
+        Each item includes `enabled_for_entity` (true/false). User login requires both
+        global provider enablement and `enabled_for_entity` for this auth entity.
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -1451,6 +1455,9 @@ paths:
     post:
       tags: [System]
       summary: Enable OAuth provider for entity
+      description: |
+        Creates or re-enables entity OAuth config (`enabled = 1`).
+        `provider_id` must be the provider UUID from `GET /sys/oauth/providers`.
       security:
         - bearerAuth: []
       requestBody:
@@ -1475,6 +1482,9 @@ paths:
     delete:
       tags: [System]
       summary: Disable OAuth provider for entity
+      description: |
+        Sets entity OAuth config to disabled (`enabled = 0`). Does not remove the provider
+        from the global registry. Returns 404 if no config exists for the entity/provider pair.
       security:
         - bearerAuth: []
       requestBody:
