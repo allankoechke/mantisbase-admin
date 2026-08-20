@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { ScriptHeaders } from '@/lib/script-headers'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/mantisbase.svg" type="image/svg+xml" />
         <link rel="alternate icon" href="/favicon.ico" />
+        <ScriptHeaders />
       </head>
       <body>{children}</body>
     </html>
