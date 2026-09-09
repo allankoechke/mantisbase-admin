@@ -57,7 +57,7 @@ export function SetupForm({ token, onSetupComplete }: SetupFormProps) {
 
     try {
       // Create admin account using the setup token
-      const response: any = await apiClient.call("/api/v1/auth/setup/admin", {
+      const response: any = await apiClient.call("/api/v1/sys/admins/setup", {
         method: "POST",
         body: JSON.stringify({
           email,
