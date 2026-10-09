@@ -1,11 +1,18 @@
 # Collect all admin dashboard static files
 file(GLOB_RECURSE ADMIN_STATIC_FILES LIST_DIRECTORIES false "${CMAKE_CURRENT_SOURCE_DIR}/public/*")
-
-# Collect any asset files
 file(GLOB_RECURSE MANTIS_ASSET_FILES LIST_DIRECTORIES false "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
 
-# Create CMRC resource library with embedded files
-cmrc_add_resource_library(mb-rc NAMESPACE mantis ${ADMIN_STATIC_FILES} ${MANTIS_ASSET_FILES} "favicon.ico")
+# Combine and escape problematic characters
+set(ALL_RESOURCE_FILES ${ADMIN_STATIC_FILES} ${MANTIS_ASSET_FILES})
+set(ESCAPED_RESOURCE_FILES "")
+foreach(file ${ALL_RESOURCE_FILES})
+    string(REPLACE "[" "\\[" escaped_file "${file}")
+    string(REPLACE "]" "\\]" escaped_file "${escaped_file}")
+    list(APPEND ESCAPED_RESOURCE_FILES "${escaped_file}")
+endforeach()
+
+# Create CMRC resource library with escaped paths
+cmrc_add_resource_library(mb-rc NAMESPACE mantis ${ESCAPED_RESOURCE_FILES} "favicon.ico")
 
 # Link resources to admin library - use PUBLIC to expose to downstream targets
 target_link_libraries(mantisbase PUBLIC mb-rc)
