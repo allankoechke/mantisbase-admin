@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCw, Save } from "lucide-react"
+import { Mail, RefreshCw, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import {
   type SmtpConfig,
 } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
+import { SmtpTestDialog } from "./smtp-test-dialog"
 
 interface SettingsSectionProps {
   apiClient: ApiClient
@@ -52,6 +53,7 @@ export function SettingsSection({ apiClient }: SettingsSectionProps) {
   const [isLoading, setIsLoading] = React.useState<Record<string, boolean>>({})
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isBootstrapping, setIsBootstrapping] = React.useState(true)
+  const [smtpTestOpen, setSmtpTestOpen] = React.useState(false)
 
   const applySettings = React.useCallback((settings: AppSettings) => {
     const normalized: AppSettings = {
@@ -290,7 +292,15 @@ export function SettingsSection({ apiClient }: SettingsSectionProps) {
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">Manage your application configuration and preferences</p>
+          <p className="text-muted-foreground">
+            Manage your application configuration and preferences
+            {formData.mantisVersion ? (
+              <>
+                {" "}
+                · Server <span className="font-mono text-foreground">{formData.mantisVersion}</span>
+              </>
+            ) : null}
+          </p>
         </div>
         <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -481,12 +491,24 @@ export function SettingsSection({ apiClient }: SettingsSectionProps) {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle>SMTP</CardTitle>
                 <CardDescription>Outbound email delivery configuration</CardDescription>
               </div>
-              {renderSaveButton("smtp")}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSmtpTestOpen(true)}
+                  className="gap-2"
+                >
+                  <Mail className="h-4 w-4" />
+                  Test SMTP
+                </Button>
+                {renderSaveButton("smtp")}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -551,9 +573,15 @@ export function SettingsSection({ apiClient }: SettingsSectionProps) {
                 onCheckedChange={(checked) => handleSmtpChange("tls", checked)}
               />
             </div>
+
+            <p className="text-sm text-muted-foreground">
+              Test SMTP uses the configuration already saved on the server. Save any changes before testing.
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      <SmtpTestDialog open={smtpTestOpen} apiClient={apiClient} onClose={() => setSmtpTestOpen(false)} />
     </div>
   )
 }

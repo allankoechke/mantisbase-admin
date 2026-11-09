@@ -71,6 +71,9 @@ export const SYS_ADMINS_API = "/api/v1/sys/admins" as const
 /** Application settings (GET/PATCH). */
 export const SYS_SETTINGS_CONFIG_API = "/api/v1/sys/settings/config" as const
 
+/** Send a test email using the saved SMTP configuration. */
+export const SYS_SETTINGS_SMTP_TEST_API = "/api/v1/sys/settings/smtp/test" as const
+
 /** Admin API keys (list, create, update, revoke). */
 export const SYS_API_KEYS_API = "/api/v1/sys/api-keys" as const
 
@@ -258,6 +261,18 @@ export interface AppSettings {
   jwtEnableSetIssuer: boolean
   jwtEnableSetAudience: boolean
   smtp: SmtpConfig
+  /** Running MantisBase server version (read-only from GET settings). */
+  mantisVersion?: string
+}
+
+export interface SmtpTestRequest {
+  email: string
+}
+
+export interface SmtpTestResult {
+  to: string
+  subject: string
+  message: string
 }
 
 // API Response interface

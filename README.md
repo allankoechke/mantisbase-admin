@@ -170,7 +170,8 @@ Connected to `GET/PATCH /api/v1/sys/settings/config`:
 - **General** — organization name, site domain, CORS origins
 - **File & Sessions** — max upload size (MB in UI, bytes in API), session timeouts
 - **Features** — registration, email verification, schema mutations, JWT issuer/audience flags
-- **SMTP** — outbound mail configuration
+- **SMTP** — outbound mail configuration, plus **Test SMTP** (`POST /api/v1/sys/settings/smtp/test`) using the saved server config
+- Server version from settings (`mantisVersion`) shown in the Settings header
 
 Site domain is used for OAuth callback URL hints in the configure drawer.
 
