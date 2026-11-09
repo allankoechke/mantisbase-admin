@@ -53,12 +53,21 @@ export const DEFAULT_AUTH_METHODS: AuthMethods = {
   oauth: false,
 }
 
-/** Normalize schema auth flags; defaults match new auth entities. */
+/**
+ * Normalize schema auth flags for UI/API use.
+ * Backward compatible: when `auth` is null/undefined (older schemas), password is ON
+ * and otp/oauth are OFF — matching pre-method-flag password-only login.
+ */
 export function normalizeAuthMethods(auth?: Partial<AuthMethods> | null): AuthMethods {
+  if (auth == null) {
+    return { ...DEFAULT_AUTH_METHODS }
+  }
+
   return {
-    password: auth?.password ?? DEFAULT_AUTH_METHODS.password,
-    otp: auth?.otp ?? DEFAULT_AUTH_METHODS.otp,
-    oauth: auth?.oauth ?? DEFAULT_AUTH_METHODS.oauth,
+    // Missing password key on a partial auth object also defaults to ON.
+    password: auth.password ?? true,
+    otp: auth.otp ?? false,
+    oauth: auth.oauth ?? false,
   }
 }
 
