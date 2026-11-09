@@ -40,6 +40,33 @@ export interface SchemaRules {
   update: RuleConfig
 }
 
+/** Login methods for auth-type entities (PATCH via schema `auth` object). */
+export interface AuthMethods {
+  password: boolean
+  otp: boolean
+  oauth: boolean
+}
+
+export const DEFAULT_AUTH_METHODS: AuthMethods = {
+  password: true,
+  otp: false,
+  oauth: false,
+}
+
+/** Normalize schema auth flags; defaults match new auth entities. */
+export function normalizeAuthMethods(auth?: Partial<AuthMethods> | null): AuthMethods {
+  return {
+    password: auth?.password ?? DEFAULT_AUTH_METHODS.password,
+    otp: auth?.otp ?? DEFAULT_AUTH_METHODS.otp,
+    oauth: auth?.oauth ?? DEFAULT_AUTH_METHODS.oauth,
+  }
+}
+
+/** Public login-method flags for an auth entity. */
+export function entityAuthMethodsApi(entityName: string): string {
+  return `/api/v1/auth/${encodeURIComponent(entityName)}/methods`
+}
+
 export interface TableSchema {
   fields: TableField[]
   has_api: boolean
@@ -48,6 +75,8 @@ export interface TableSchema {
   rules: SchemaRules
   system: boolean
   type: "base" | "auth" | "view"
+  /** Present on auth entities: which login methods are enabled. */
+  auth?: AuthMethods
   sql?: string
 }
 

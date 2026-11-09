@@ -120,7 +120,7 @@ function SchemaReferenceSection() {
   const entityTypesExample = JSON.stringify(
     {
       base: "Standard CRUD entity with configurable access rules",
-      auth: "User authentication entity — enables /auth/{name}/login, API keys, and OAuth",
+      auth: "User authentication entity — login methods (password/otp/oauth), API keys, and OAuth providers",
       view: "Read-only SQL view — requires view_query, mutations rejected",
     },
     null,

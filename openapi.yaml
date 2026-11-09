@@ -91,13 +91,41 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/{entity_name}/methods:
+    get:
+      tags: [Auth]
+      summary: List enabled login methods
+      description: |
+        Public endpoint. Returns which login methods are enabled for this auth entity.
+        Defaults: `password` true, `otp` false, `oauth` false.
+        Clients should fetch this before rendering a login screen and hide disabled methods.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      responses:
+        "200":
+          description: Method flags
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthMethods"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /auth/{entity_name}/login:
     post:
       tags: [Auth]
-      summary: Entity user login
+      summary: Entity user password login
       description: |
-        Authenticate against an auth-type entity and receive a JWT. Rate-limited to 5 attempts/minute per IP.
-        The entity must be type `auth`, API-enabled, and not a system entity.
+        Authenticate with identity (email or user id) and password. Rate-limited to 5 attempts/minute per IP.
+        Returns **403** when `auth.password` is disabled for the entity.
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -121,8 +149,132 @@ paths:
                         $ref: "#/components/schemas/AuthTokenResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Password login disabled for this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/otp/request:
+    post:
+      tags: [Auth]
+      summary: Request email sign-in code
+      description: |
+        Sends a 6-digit OTP to the given email when an account exists. Always returns
+        `{ "sent": true }` for unknown emails as well (no account enumeration).
+        Requires `auth.otp` enabled and SMTP configured. Rate-limited: 5/min per IP;
+        3 emails/hour per recipient.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Request accepted (sent or silently ignored for unknown email)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          sent:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid email or SMTP not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "403":
+          description: OTP login disabled for this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          description: Failed to send the sign-in code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/otp/login:
+    post:
+      tags: [Auth]
+      summary: Login with email sign-in code
+      description: |
+        Exchange a 6-digit OTP for a JWT (same shape as password login). Code lifetime is
+        10 minutes; 5 wrong attempts invalidate the code. Single-use on success.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp]
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: Exactly 6 digits as a string (preserves leading zeros)
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthTokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid or expired sign-in code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "403":
+          description: OTP login disabled for this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -268,7 +420,9 @@ paths:
     get:
       tags: [Auth]
       summary: Start OAuth login (redirect)
-      description: Redirects the browser to the OAuth provider authorization URL (PKCE).
+      description: |
+        Redirects the browser to the OAuth provider authorization URL (PKCE).
+        Returns **403** when `auth.oauth` is disabled for the entity.
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -1852,6 +2006,22 @@ components:
         expr:
           type: string
 
+    AuthMethods:
+      type: object
+      description: Login method flags for an auth-type entity. Defaults password on, otp/oauth off.
+      properties:
+        password:
+          type: boolean
+          default: true
+        otp:
+          type: boolean
+          default: false
+          description: Email sign-in codes
+        oauth:
+          type: boolean
+          default: false
+      required: [password, otp, oauth]
+
     EntitySchema:
       type: object
       properties:
@@ -1880,6 +2050,9 @@ components:
               $ref: "#/components/schemas/AccessRule"
             delete:
               $ref: "#/components/schemas/AccessRule"
+        auth:
+          $ref: "#/components/schemas/AuthMethods"
+          description: Auth-entity login methods. Present when type is `auth`.
         view_query:
           type: string
           description: Required for `view` entities.
@@ -1904,6 +2077,8 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/AccessRule"
+        auth:
+          $ref: "#/components/schemas/AuthMethods"
         view_query:
           type: string
 
@@ -1920,6 +2095,16 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/AccessRule"
+        auth:
+          type: object
+          description: Partial update of login methods. Only sent keys are changed.
+          properties:
+            password:
+              type: boolean
+            otp:
+              type: boolean
+            oauth:
+              type: boolean
         view_query:
           type: string
 

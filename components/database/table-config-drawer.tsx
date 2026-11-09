@@ -31,7 +31,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { ApiClient, TableMetadata, ForeignKeyConfig } from "@/lib/api"
+import { Switch } from "@/components/ui/switch"
+import type { ApiClient, AuthMethods, TableMetadata, ForeignKeyConfig } from "@/lib/api"
+import { getApiClientError, normalizeAuthMethods } from "@/lib/api"
 import { dataTypes, intPrecisions, DEFAULT_INT_PRECISION } from "@/lib/constants"
 import {
   appendPrecisionToFieldPayload,
@@ -97,6 +99,10 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   const [deletedColumns, setDeletedColumns] = React.useState<string[]>([]) // Track deleted field IDs
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
+  const [authMethods, setAuthMethods] = React.useState<AuthMethods>(() =>
+    normalizeAuthMethods(table.schema.auth),
+  )
+  const [savingAuthMethod, setSavingAuthMethod] = React.useState<keyof AuthMethods | null>(null)
   const { toast } = useToast()
   const navigate = useNavigate()
   const isAuthEntity = table.schema.type === "auth"
@@ -152,6 +158,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
           expr: table.schema.rules?.delete?.expr || "",
         },
       })
+      setAuthMethods(normalizeAuthMethods(table.schema.auth))
+      setActiveTab("schema")
       setHasUnsavedChanges(false)
       setExpandedFields(new Set())
       setDeletedColumns([])
@@ -418,6 +426,53 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
     setHasUnsavedChanges(true)
   }
 
+  const handleAuthMethodToggle = async (method: keyof AuthMethods, enabled: boolean) => {
+    const previous = authMethods
+    setAuthMethods({ ...authMethods, [method]: enabled })
+    setSavingAuthMethod(method)
+
+    try {
+      const updatedTable = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          auth: { [method]: enabled },
+        }),
+      })
+
+      const apiError = getApiClientError(updatedTable)
+      if (apiError) {
+        throw new Error(apiError)
+      }
+
+      const nextMethods = normalizeAuthMethods(updatedTable.schema?.auth ?? { ...previous, [method]: enabled })
+      setAuthMethods(nextMethods)
+      onTableUpdate({
+        ...updatedTable,
+        schema: {
+          ...updatedTable.schema,
+          auth: nextMethods,
+        },
+      })
+
+      toast({
+        title: enabled ? "Method Enabled" : "Method Disabled",
+        description: `${method === "otp" ? "Email sign-in codes" : method === "oauth" ? "OAuth" : "Password login"} ${enabled ? "enabled" : "disabled"} for ${table.schema.name}.`,
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error("Failed to update auth methods:", error)
+      setAuthMethods(previous)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update auth methods",
+        variant: "destructive",
+        duration: 5000,
+      })
+    } finally {
+      setSavingAuthMethod(null)
+    }
+  }
+
   const isSystemColumn = (column: any) => {
     return column.system
   }
@@ -504,16 +559,20 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <DrawerDescription>Manage entity fields, OAuth providers, and access control rules</DrawerDescription>
+          <DrawerDescription>
+            {isAuthEntity
+              ? "Manage fields, login methods, OAuth providers, and access rules"
+              : "Manage entity fields and access control rules"}
+          </DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="p-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsList className={`grid w-full mb-6 ${isAuthEntity ? "grid-cols-3" : "grid-cols-2"}`}>
                   <TabsTrigger value="schema">Fields</TabsTrigger>
-                  <TabsTrigger value="oauth">OAuth</TabsTrigger>
+                  {isAuthEntity && <TabsTrigger value="auth">Auth</TabsTrigger>}
                   <TabsTrigger value="rules">Access Rules</TabsTrigger>
                 </TabsList>
 
@@ -882,22 +941,87 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                   )}
                 </TabsContent>
 
-                <TabsContent value="oauth" className="space-y-6">
-                  {isAuthEntity ? (
-                    <OAuthEntityPanel
-                      entityName={table.schema.name}
-                      apiClient={apiClient}
-                      isActive={open && activeTab === "oauth"}
-                    />
-                  ) : (
-                    <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      <p>
-                        OAuth is only available for <strong className="text-foreground">auth</strong>-type entities.
-                        Change this entity&apos;s type to auth to enable OAuth login and account linking.
+                {isAuthEntity && (
+                  <TabsContent value="auth" className="space-y-6">
+                    <div>
+                      <Label className="text-base font-medium">Login methods</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Control which sign-in options are available for this auth entity. Changes save immediately and
+                        only affect new logins.
                       </p>
                     </div>
-                  )}
-                </TabsContent>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5 pr-4">
+                          <Label className="text-base">Password</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Email/identity and password via <code className="bg-muted px-1 rounded text-xs">/login</code>
+                          </p>
+                        </div>
+                        <Switch
+                          checked={authMethods.password}
+                          disabled={savingAuthMethod !== null}
+                          onCheckedChange={(checked) => handleAuthMethodToggle("password", checked)}
+                          aria-label="Enable password login"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5 pr-4">
+                          <Label className="text-base">Email sign-in codes (OTP)</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Send a 6-digit code to the user&apos;s email. Requires SMTP in application settings.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={authMethods.otp}
+                          disabled={savingAuthMethod !== null}
+                          onCheckedChange={(checked) => handleAuthMethodToggle("otp", checked)}
+                          aria-label="Enable email sign-in codes"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5 pr-4">
+                          <Label className="text-base">OAuth</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Third-party providers. After enabling, configure and enable providers below.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={authMethods.oauth}
+                          disabled={savingAuthMethod !== null}
+                          onCheckedChange={(checked) => handleAuthMethodToggle("oauth", checked)}
+                          aria-label="Enable OAuth login"
+                        />
+                      </div>
+                    </div>
+
+                    {authMethods.otp && (
+                      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                        OTP request returns <strong className="text-foreground">400</strong> with{" "}
+                        <code className="bg-background px-1 rounded text-xs">Email service not configured</code> until
+                        SMTP host and from are set under Settings.
+                      </div>
+                    )}
+
+                    {authMethods.oauth ? (
+                      <div className="space-y-4 pt-2 border-t">
+                        <OAuthEntityPanel
+                          entityName={table.schema.name}
+                          apiClient={apiClient}
+                          isActive={open && activeTab === "auth"}
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                        Enable <strong className="text-foreground">OAuth</strong> above to register providers and turn
+                        them on for this entity.
+                      </div>
+                    )}
+                  </TabsContent>
+                )}
 
                 <TabsContent value="rules" className="space-y-6">
                   <div>
@@ -1152,7 +1276,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
               Delete Entity
             </Button>
           )}
-          {activeTab !== "oauth" && (
+          {activeTab !== "auth" && (
             <Button
               onClick={activeTab === "schema" ? handleSaveSchema : handleSaveRules}
               disabled={isLoading}
