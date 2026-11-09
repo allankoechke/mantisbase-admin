@@ -1239,6 +1239,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiEnvelope"
 
+  /sys/settings/smtp/test:
+    post:
+      tags: [System]
+      summary: Send SMTP test message
+      description: |
+        Sends a test email using the SMTP settings already stored on the server.
+        Does not modify settings. Not blocked by `MB_DISABLE_CONFIG_MUTATIONS`.
+        Rate-limited to 3 messages per recipient per hour.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: you@example.com
+      responses:
+        "200":
+          description: Test email sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          to:
+                            type: string
+                            format: email
+                          subject:
+                            type: string
+                            example: "MantisBase: Hey, it works!"
+                          message:
+                            type: string
+                            example: If you are seeing this, the SMTP Settings are OK!
+        "400":
+          description: Invalid email or SMTP not configured (host and from required)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          description: SMTP server rejected the message or could not be reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+
   /sys/api-keys:
     get:
       tags: [System]
