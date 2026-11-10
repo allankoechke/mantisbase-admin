@@ -96,9 +96,10 @@ paths:
       tags: [Auth]
       summary: List enabled login methods
       description: |
-        Public endpoint. Returns which login methods are enabled for this auth entity.
-        Defaults: `password` true, `otp` false, `oauth` false.
-        Clients should fetch this before rendering a login screen and hide disabled methods.
+        Public endpoint. Returns which login methods are enabled for this auth entity,
+        plus `requireEmailVerification`.
+        Defaults: `password` true; `otp`, `oauth`, and `requireEmailVerification` false.
+        Clients should fetch this before rendering a login or register screen.
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -125,7 +126,8 @@ paths:
       summary: Entity user password login
       description: |
         Authenticate with identity (email or user id) and password. Rate-limited to 5 attempts/minute per IP.
-        Returns **403** when `auth.password` is disabled for the entity.
+        Returns **403** when `auth.password` is disabled, or when `requireEmailVerification` is on and
+        `email_verified` is false (`Verify your email before signing in.`).
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -277,6 +279,127 @@ paths:
                 $ref: "#/components/schemas/ApiEnvelope"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/verify-email:
+    get:
+      tags: [Auth]
+      summary: Verify email via link (HTML)
+      description: |
+        Opens from the verification email link (`?token=`). Returns a short HTML success/failure page.
+        Token lasts 24 hours and is single-use. Prefer this when the app does not own a verify page.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML verification result page
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Invalid or expired verification link
+    post:
+      tags: [Auth]
+      summary: Verify email with token (JSON)
+      description: |
+        App-owned verify flow. Body contains the token from the email link query string.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verified:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid or expired verification link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/verify-email/request:
+    post:
+      tags: [Auth]
+      summary: Resend email verification link
+      description: |
+        Always returns `{ "sent": true }` for unknown or already-verified addresses (no enumeration).
+        Requires SMTP and `siteDomain`. Rate-limited like OTP (5/min per IP; 3 emails/hour per recipient).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          sent:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid email, SMTP missing, or siteDomain unset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          description: Failed to send the verification email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -2008,7 +2131,10 @@ components:
 
     AuthMethods:
       type: object
-      description: Login method flags for an auth-type entity. Defaults password on, otp/oauth off.
+      description: |
+        Login method and verification flags for an auth-type entity.
+        Defaults: password on; otp, oauth, and requireEmailVerification off.
+        When `auth` is omitted on older schemas, treat as password-only login.
       properties:
         password:
           type: boolean
@@ -2020,7 +2146,11 @@ components:
         oauth:
           type: boolean
           default: false
-      required: [password, otp, oauth]
+        requireEmailVerification:
+          type: boolean
+          default: false
+          description: When true, new logins require email_verified until the user verifies.
+      required: [password, otp, oauth, requireEmailVerification]
 
     EntitySchema:
       type: object
@@ -2097,13 +2227,15 @@ components:
             $ref: "#/components/schemas/AccessRule"
         auth:
           type: object
-          description: Partial update of login methods. Only sent keys are changed.
+          description: Partial update of login methods / verification. Only sent keys are changed.
           properties:
             password:
               type: boolean
             otp:
               type: boolean
             oauth:
+              type: boolean
+            requireEmailVerification:
               type: boolean
         view_query:
           type: string

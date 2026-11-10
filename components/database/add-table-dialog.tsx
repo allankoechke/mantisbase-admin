@@ -235,6 +235,22 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
               validator: "@password"
             }
           },
+          {
+            id: "mbf_14924781257948638420",
+            name: "email_verified",
+            type: "bool",
+            primary_key: false,
+            nullable: false,
+            system: true,
+            required: true,
+            unique: false,
+            constraints: {
+              min_value: null,
+              max_value: null,
+              default_value: false,
+              validator: null
+            }
+          },
         ])
       }
     }

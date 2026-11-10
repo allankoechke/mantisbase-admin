@@ -151,10 +151,14 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
       <SimpleEndpointDoc
         method="GET"
         endpoint={`${authPrefix}/methods`}
-        description="Public. Returns which login methods are enabled (password, otp, oauth). Fetch this before rendering a login screen."
+        description="Public. Returns login method flags plus requireEmailVerification. Fetch this before login/register screens."
         requestExample={`curl "${baseUrl}${authPrefix}/methods"`}
         responseExample={JSON.stringify(
-          { status: 200, data: { password: true, otp: false, oauth: false }, error: "" },
+          {
+            status: 200,
+            data: { password: true, otp: false, oauth: false, requireEmailVerification: false },
+            error: "",
+          },
           null,
           2,
         )}
@@ -163,7 +167,7 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
       <SimpleEndpointDoc
         method="POST"
         endpoint={`${authPrefix}/login`}
-        description="Password login with identity (email or user id) and password. Returns 403 when auth.password is disabled."
+        description="Password login with identity (email or user id) and password. Returns 403 when password is disabled or email verification is required and unfinished."
         requestExample={`curl -X POST "${baseUrl}${authPrefix}/login" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -175,7 +179,11 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
             status: 200,
             data: {
               token: "eyJhbGciOiJIUzI1NiIs...",
-              user: { id: "019c1b81-364b-7000-8120-b5416b2c42c2", email: "user@example.com" },
+              user: {
+                id: "019c1b81-364b-7000-8120-b5416b2c42c2",
+                email: "user@example.com",
+                email_verified: true,
+              },
             },
             error: "",
           },
@@ -184,10 +192,36 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
         )}
         errors={[
           { code: "400", message: "Bad Request — invalid credentials or OAuth-only account" },
-          { code: "403", message: "Forbidden — password login disabled" },
+          { code: "403", message: "Method disabled, or verify email before signing in" },
           { code: "404", message: "Not Found — entity not found or not auth-enabled" },
           { code: "429", message: "Too Many Requests — rate limit exceeded" },
         ]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/verify-email/request`}
+        description="Resend verification email. Always returns sent:true (including unknown/already-verified addresses). Needs SMTP and siteDomain."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/verify-email/request" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "email": "user@example.com" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { sent: true }, error: "" }, null, 2)}
+        errors={[
+          { code: "400", message: "Invalid email, SMTP missing, or siteDomain unset" },
+          { code: "429", message: "Rate limited" },
+          { code: "502", message: "Failed to send the verification email" },
+        ]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/verify-email`}
+        description="Complete verification with the token from the email link (app-owned verify page). GET with ?token= returns HTML instead."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/verify-email" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "token": "verification_token_from_link" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { verified: true }, error: "" }, null, 2)}
+        errors={[{ code: "400", message: "Invalid or expired verification link" }]}
       />
 
       <SimpleEndpointDoc

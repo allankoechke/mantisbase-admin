@@ -440,7 +440,15 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                           onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
                           disabled={isDisabled}
                         />
-                        <span>{formData[field.name] === true ? "True" : "False"}</span>
+                        <span>
+                          {field.name === "email_verified"
+                            ? formData[field.name]
+                              ? "Verified"
+                              : "Unverified"
+                            : formData[field.name] === true
+                              ? "True"
+                              : "False"}
+                        </span>
                       </div>
                     ) : field.type === "date" || field.type === "datetime" || field.type === "timestamp" ? (
                       <Input
@@ -478,6 +486,12 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                     )}
                     {table.schema.type === "auth" && field.name === "password" && (
                       <p className="text-xs text-muted-foreground">Password fields are redacted in API responses.</p>
+                    )}
+                    {table.schema.type === "auth" && field.name === "email_verified" && (
+                      <p className="text-xs text-muted-foreground">
+                        Admins can set this flag. Changing the email clears verification unless you also set
+                        email_verified in the same save.
+                      </p>
                     )}
                   </div>
                 );

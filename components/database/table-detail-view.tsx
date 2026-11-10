@@ -3,6 +3,7 @@
 import * as React from "react"
 import { RefreshCw, Cog, FileText, Trash2, Search, Plus, Key, MoreHorizontal } from "lucide-react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -237,8 +238,17 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
 
     switch (field.type) {
       case "bool":
-      case "boolean":
-        return value === true || value === "true" || value === 1 ? "true" : "false"
+      case "boolean": {
+        const isTrue = value === true || value === "true" || value === 1
+        if (field.name === "email_verified") {
+          return (
+            <Badge variant={isTrue ? "secondary" : "outline"} className="text-xs">
+              {isTrue ? "Verified" : "Unverified"}
+            </Badge>
+          )
+        }
+        return isTrue ? "true" : "false"
+      }
 
       case "json":
         try {

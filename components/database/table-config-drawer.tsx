@@ -33,7 +33,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import type { ApiClient, AuthMethods, TableMetadata, ForeignKeyConfig } from "@/lib/api"
-import { getApiClientError, normalizeAuthMethods } from "@/lib/api"
+import { authMethodLabel, getApiClientError, normalizeAuthMethods } from "@/lib/api"
 import { dataTypes, intPrecisions, DEFAULT_INT_PRECISION } from "@/lib/constants"
 import {
   appendPrecisionToFieldPayload,
@@ -455,8 +455,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       })
 
       toast({
-        title: enabled ? "Method Enabled" : "Method Disabled",
-        description: `${method === "otp" ? "Email sign-in codes" : method === "oauth" ? "OAuth" : "Password login"} ${enabled ? "enabled" : "disabled"} for ${table.schema.name}.`,
+        title: enabled ? "Setting Enabled" : "Setting Disabled",
+        description: `${authMethodLabel(method)} ${enabled ? "enabled" : "disabled"} for ${table.schema.name}.`,
         duration: 3000,
       })
     } catch (error) {
@@ -998,11 +998,45 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
                       </div>
                     </div>
 
-                    {authMethods.otp && (
-                      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                        OTP request returns <strong className="text-foreground">400</strong> with{" "}
-                        <code className="bg-background px-1 rounded text-xs">Email service not configured</code> until
-                        SMTP host and from are set under Settings.
+                    <div>
+                      <Label className="text-base font-medium">Email verification</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Require users to verify their email before a new login. Existing sessions keep working.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5 pr-4">
+                        <Label className="text-base">Require email verification</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When on, password, OTP, and OAuth logins return{" "}
+                          <code className="bg-muted px-1 rounded text-xs">403</code> until{" "}
+                          <code className="bg-muted px-1 rounded text-xs">email_verified</code> is true. Needs SMTP and
+                          Site Domain for verification emails.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={authMethods.requireEmailVerification}
+                        disabled={savingAuthMethod !== null}
+                        onCheckedChange={(checked) => handleAuthMethodToggle("requireEmailVerification", checked)}
+                        aria-label="Require email verification before login"
+                      />
+                    </div>
+
+                    {(authMethods.otp || authMethods.requireEmailVerification) && (
+                      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground space-y-1">
+                        {authMethods.otp && (
+                          <p>
+                            OTP requires SMTP (<strong className="text-foreground">host</strong> and{" "}
+                            <strong className="text-foreground">from</strong>) under Settings.
+                          </p>
+                        )}
+                        {authMethods.requireEmailVerification && (
+                          <p>
+                            Verification emails also need <strong className="text-foreground">Site Domain</strong> set
+                            under Settings (General).
+                          </p>
+                        )}
                       </div>
                     )}
 

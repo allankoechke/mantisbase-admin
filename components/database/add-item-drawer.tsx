@@ -313,14 +313,29 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                       </SelectContent>
                     </Select>
                   ) : field.type === "bool" ? (
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={field.name}
-                        checked={!!formData[field.name]}
-                        onCheckedChange={(checked: any) => handleFieldChange(field.name, checked)}
-                        disabled={(field.type === "view" || isSystemGeneratedField(field))}
-                      />
-                      <span>{formData[field.name] === true ? "True" : "False"}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={field.name}
+                          checked={!!formData[field.name]}
+                          onCheckedChange={(checked: any) => handleFieldChange(field.name, checked)}
+                          disabled={field.type === "view" || isSystemGeneratedField(field)}
+                        />
+                        <span>
+                          {field.name === "email_verified"
+                            ? formData[field.name]
+                              ? "Verified"
+                              : "Unverified"
+                            : formData[field.name] === true
+                              ? "True"
+                              : "False"}
+                        </span>
+                      </div>
+                      {table.schema.type === "auth" && field.name === "email_verified" && (
+                        <p className="text-xs text-muted-foreground">
+                          Defaults to unverified. Only admins should set this; app clients cannot.
+                        </p>
+                      )}
                     </div>
                   ) : field.type === "file" ? (
                     <Input

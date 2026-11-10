@@ -150,14 +150,15 @@ For entities with `type: "auth"`:
 - **API Keys** tab — list/create/revoke entity user API keys (`/api/v1/auth/{entity}/api-keys`)
 - Per-user “Create API Key” from row actions
 - **Login methods** — `auth.password` / `auth.otp` / `auth.oauth` on the schema (defaults: password on, OTP/OAuth off). Public apps read `GET /api/v1/auth/{entity}/methods`.
+- **Email verification** — `auth.requireEmailVerification` (default off). Auth records include system field `email_verified` (admin-editable). Apps use `/verify-email` and `/verify-email/request`.
 - **OAuth providers** — shown under Auth only when `auth.oauth` is on; per-provider enablement via `enabled_for_entity`
 
 Auth / OAuth workflow:
 
 1. Enable the desired methods under **Configure → Auth**
-2. For OTP, configure SMTP under Settings first
+2. For OTP or required email verification, configure SMTP (and Site Domain for verification links) under Settings
 3. For OAuth, register providers and toggle **Enabled for entity**
-4. Client apps should call `/methods` and only show enabled options
+4. Client apps should call `/methods` and only show enabled options / verification UX when flagged
 
 ### Admins
 
