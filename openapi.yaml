@@ -91,13 +91,43 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/{entity_name}/methods:
+    get:
+      tags: [Auth]
+      summary: List enabled login methods
+      description: |
+        Public endpoint. Returns which login methods are enabled for this auth entity,
+        plus `requireEmailVerification`.
+        Defaults: `password` true; `otp`, `oauth`, and `requireEmailVerification` false.
+        Clients should fetch this before rendering a login or register screen.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      responses:
+        "200":
+          description: Method flags
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthMethods"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /auth/{entity_name}/login:
     post:
       tags: [Auth]
-      summary: Entity user login
+      summary: Entity user password login
       description: |
-        Authenticate against an auth-type entity and receive a JWT. Rate-limited to 5 attempts/minute per IP.
-        The entity must be type `auth`, API-enabled, and not a system entity.
+        Authenticate with identity (email or user id) and password. Rate-limited to 5 attempts/minute per IP.
+        Returns **403** when `auth.password` is disabled, or when `requireEmailVerification` is on and
+        `email_verified` is false (`Verify your email before signing in.`).
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -121,10 +151,255 @@ paths:
                         $ref: "#/components/schemas/AuthTokenResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Password login disabled for this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/otp/request:
+    post:
+      tags: [Auth]
+      summary: Request email sign-in code
+      description: |
+        Sends a 6-digit OTP to the given email when an account exists. Always returns
+        `{ "sent": true }` for unknown emails as well (no account enumeration).
+        Requires `auth.otp` enabled and SMTP configured. Rate-limited: 5/min per IP;
+        3 emails/hour per recipient.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Request accepted (sent or silently ignored for unknown email)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          sent:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid email or SMTP not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "403":
+          description: OTP login disabled for this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          description: Failed to send the sign-in code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/otp/login:
+    post:
+      tags: [Auth]
+      summary: Login with email sign-in code
+      description: |
+        Exchange a 6-digit OTP for a JWT (same shape as password login). Code lifetime is
+        10 minutes; 5 wrong attempts invalidate the code. Single-use on success.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp]
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: Exactly 6 digits as a string (preserves leading zeros)
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthTokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid or expired sign-in code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "403":
+          description: OTP login disabled for this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/verify-email:
+    get:
+      tags: [Auth]
+      summary: Verify email via link (HTML)
+      description: |
+        Opens from the verification email link (`?token=`). Returns a short HTML success/failure page.
+        Token lasts 24 hours and is single-use. Prefer this when the app does not own a verify page.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML verification result page
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Invalid or expired verification link
+    post:
+      tags: [Auth]
+      summary: Verify email with token (JSON)
+      description: |
+        App-owned verify flow. Body contains the token from the email link query string.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verified:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid or expired verification link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/verify-email/request:
+    post:
+      tags: [Auth]
+      summary: Resend email verification link
+      description: |
+        Always returns `{ "sent": true }` for unknown or already-verified addresses (no enumeration).
+        Requires SMTP and `siteDomain`. Rate-limited like OTP (5/min per IP; 3 emails/hour per recipient).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          sent:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid email, SMTP missing, or siteDomain unset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          description: Failed to send the verification email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -268,7 +543,9 @@ paths:
     get:
       tags: [Auth]
       summary: Start OAuth login (redirect)
-      description: Redirects the browser to the OAuth provider authorization URL (PKCE).
+      description: |
+        Redirects the browser to the OAuth provider authorization URL (PKCE).
+        Returns **403** when `auth.oauth` is disabled for the entity.
       security: []
       parameters:
         - $ref: "#/components/parameters/EntityName"
@@ -1852,6 +2129,29 @@ components:
         expr:
           type: string
 
+    AuthMethods:
+      type: object
+      description: |
+        Login method and verification flags for an auth-type entity.
+        Defaults: password on; otp, oauth, and requireEmailVerification off.
+        When `auth` is omitted on older schemas, treat as password-only login.
+      properties:
+        password:
+          type: boolean
+          default: true
+        otp:
+          type: boolean
+          default: false
+          description: Email sign-in codes
+        oauth:
+          type: boolean
+          default: false
+        requireEmailVerification:
+          type: boolean
+          default: false
+          description: When true, new logins require email_verified until the user verifies.
+      required: [password, otp, oauth, requireEmailVerification]
+
     EntitySchema:
       type: object
       properties:
@@ -1880,6 +2180,9 @@ components:
               $ref: "#/components/schemas/AccessRule"
             delete:
               $ref: "#/components/schemas/AccessRule"
+        auth:
+          $ref: "#/components/schemas/AuthMethods"
+          description: Auth-entity login methods. Present when type is `auth`.
         view_query:
           type: string
           description: Required for `view` entities.
@@ -1904,6 +2207,8 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/AccessRule"
+        auth:
+          $ref: "#/components/schemas/AuthMethods"
         view_query:
           type: string
 
@@ -1920,6 +2225,18 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/AccessRule"
+        auth:
+          type: object
+          description: Partial update of login methods / verification. Only sent keys are changed.
+          properties:
+            password:
+              type: boolean
+            otp:
+              type: boolean
+            oauth:
+              type: boolean
+            requireEmailVerification:
+              type: boolean
         view_query:
           type: string
 

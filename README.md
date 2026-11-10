@@ -131,9 +131,9 @@ This repo includes an `mb-admins` branch with **built static files**, integrated
 
 - List, create, and open entities
 - **Entity types:** `base`, `auth`, and `view` (read-only SQL views)
-- **Configure drawer** (three tabs):
+- **Configure drawer**:
   - **Fields** — schema editor with constraints, validators, foreign keys
-  - **OAuth** — register providers and enable/disable per auth entity (see below)
+  - **Auth** (auth entities) — toggles for password, email OTP, and OAuth login methods; OAuth provider registry appears only when OAuth is enabled
   - **Access Rules** — per-operation modes: admin-only, public, authenticated, custom expression
 - Record CRUD with search/filter, column visibility, file field uploads
 - Legacy field types (`int32`, `xml`, `blob`, etc.) are normalized in the editor and auto-migrated on save
@@ -149,14 +149,16 @@ For entities with `type: "auth"`:
 - **Records** tab — user records
 - **API Keys** tab — list/create/revoke entity user API keys (`/api/v1/auth/{entity}/api-keys`)
 - Per-user “Create API Key” from row actions
-- **OAuth** (in configure drawer) — global provider registry + per-entity enablement via `enabled_for_entity`
+- **Login methods** — `auth.password` / `auth.otp` / `auth.oauth` on the schema (defaults: password on, OTP/OAuth off). Public apps read `GET /api/v1/auth/{entity}/methods`.
+- **Email verification** — `auth.requireEmailVerification` (default off). Auth records include system field `email_verified` (admin-editable). Apps use `/verify-email` and `/verify-email/request`.
+- **OAuth providers** — shown under Auth only when `auth.oauth` is on; per-provider enablement via `enabled_for_entity`
 
-OAuth workflow:
+Auth / OAuth workflow:
 
-1. Register providers (name, client ID, secret) in the entity **OAuth** tab
-2. Toggle **Enabled for entity** (calls `POST/DELETE /api/v1/sys/oauth/entity-config`)
-3. Status is read from `GET /api/v1/auth/{entity}/oauth/providers` (`enabled_for_entity` on each provider)
-4. User login requires the provider to be globally enabled **and** enabled for that entity
+1. Enable the desired methods under **Configure → Auth**
+2. For OTP or required email verification, configure SMTP (and Site Domain for verification links) under Settings
+3. For OAuth, register providers and toggle **Enabled for entity**
+4. Client apps should call `/methods` and only show enabled options / verification UX when flagged
 
 ### Admins
 

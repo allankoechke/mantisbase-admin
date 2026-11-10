@@ -18,8 +18,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ApiClient, TableMetadata, TableField, buildEntityFileUrl } from "@/lib/api"
+import { isFieldRequiredInForm } from "@/lib/auth-fields"
 import { formatFieldTypeDisplay, isNumericFieldType } from "@/lib/field-types"
 import { useToast } from "@/hooks/use-toast"
+import { PasswordFieldInput } from "./password-field-input"
+import { SendVerificationButton } from "./send-verification-button"
 
 interface EditItemDrawerProps {
   table: TableMetadata
@@ -393,7 +396,7 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                   <div key={field.name} className="space-y-2">
                     <Label htmlFor={field.name} className="text-sm font-medium">
                       {field.name}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                      {isFieldRequiredInForm(field, table.schema.type) && <span className="text-red-500 ml-1">*</span>}
                     </Label>
 
                     {/* FOREIGN KEY FIELD */}
@@ -433,14 +436,37 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                         table={table}
                       />
                     ) : field.type === "bool" ? (
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id={field.name}
-                          checked={!!value}
-                          onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
-                          disabled={isDisabled}
-                        />
-                        <span>{formData[field.name] === true ? "True" : "False"}</span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id={field.name}
+                            checked={!!value}
+                            onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
+                            disabled={isDisabled}
+                          />
+                          <span>
+                            {field.name === "email_verified"
+                              ? formData[field.name]
+                                ? "Verified"
+                                : "Unverified"
+                              : formData[field.name] === true
+                                ? "True"
+                                : "False"}
+                          </span>
+                        </div>
+                        {table.schema.type === "auth" && field.name === "email_verified" && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Admins can set this flag. Changing the email clears verification unless you also set
+                              email_verified in the same save.
+                            </p>
+                            <SendVerificationButton
+                              entityName={table.schema.name}
+                              email={formData.email}
+                              apiClient={apiClient}
+                            />
+                          </div>
+                        )}
                       </div>
                     ) : field.type === "date" || field.type === "datetime" || field.type === "timestamp" ? (
                       <Input
@@ -461,10 +487,30 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
                         className={`w-full ${isDisabled ? "bg-muted" : ""}`}
                         placeholder={`Enter '${formatFieldTypeDisplay(field)}' value`}
                       />
+                    ) : field.name === "password" ? (
+                      <div className="space-y-2">
+                        <PasswordFieldInput
+                          id={field.name}
+                          value={value ?? ""}
+                          onChange={(next) => handleFieldChange(field.name, next)}
+                          disabled={isDisabled}
+                          className={isDisabled ? "bg-muted" : ""}
+                          placeholder={
+                            table.schema.type === "auth"
+                              ? "Leave blank to keep current / OAuth-only"
+                              : "Enter password"
+                          }
+                        />
+                        {table.schema.type === "auth" && (
+                          <p className="text-xs text-muted-foreground">
+                            Optional. Leave blank to keep the current password. Responses redact password values.
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       <Input
                         id={field.name}
-                        type={field.name === "password" ? "password" : "text"}
+                        type="text"
                         value={value ?? ""}
                         onChange={(e) => handleFieldChange(field.name, e.target.value)}
                         disabled={isDisabled}
@@ -475,9 +521,6 @@ export function EditItemDrawer({ table, item, apiClient, open, onClose, onItemUp
 
                     {isDisabled && (
                       <p className="text-xs text-muted-foreground">System generated field - cannot be modified</p>
-                    )}
-                    {table.schema.type === "auth" && field.name === "password" && (
-                      <p className="text-xs text-muted-foreground">Password fields are redacted in API responses.</p>
                     )}
                   </div>
                 );

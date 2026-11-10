@@ -18,9 +18,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ApiClient, TableMetadata, TableField } from "@/lib/api"
+import { isFieldRequiredInForm } from "@/lib/auth-fields"
 import { isNumericFieldType } from "@/lib/field-types"
 import { Badge } from "../ui/badge"
 import { useToast } from "@/hooks/use-toast"
+import { PasswordFieldInput } from "./password-field-input"
 
 interface EditItemDrawerProps {
   table: TableMetadata
@@ -284,7 +286,7 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                 <div key={field.name} className="space-y-2">
                   <Label htmlFor={field.name} className="text-sm font-medium">
                     {field.name}
-                    {(field.required || field.system) && <span className="text-red-500 ml-1">*</span>}
+                    {isFieldRequiredInForm(field, table.schema.type) && <span className="text-red-500 ml-1">*</span>}
                   </Label>
                   {isFkField ? (
                     <Select
@@ -313,14 +315,29 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                       </SelectContent>
                     </Select>
                   ) : field.type === "bool" ? (
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={field.name}
-                        checked={!!formData[field.name]}
-                        onCheckedChange={(checked: any) => handleFieldChange(field.name, checked)}
-                        disabled={(field.type === "view" || isSystemGeneratedField(field))}
-                      />
-                      <span>{formData[field.name] === true ? "True" : "False"}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={field.name}
+                          checked={!!formData[field.name]}
+                          onCheckedChange={(checked: any) => handleFieldChange(field.name, checked)}
+                          disabled={field.type === "view" || isSystemGeneratedField(field)}
+                        />
+                        <span>
+                          {field.name === "email_verified"
+                            ? formData[field.name]
+                              ? "Verified"
+                              : "Unverified"
+                            : formData[field.name] === true
+                              ? "True"
+                              : "False"}
+                        </span>
+                      </div>
+                      {table.schema.type === "auth" && field.name === "email_verified" && (
+                        <p className="text-xs text-muted-foreground">
+                          Defaults to unverified. After creating the user, open Edit to send a verification email.
+                        </p>
+                      )}
                     </div>
                   ) : field.type === "file" ? (
                     <Input
@@ -350,15 +367,25 @@ export function AddItemDrawer({ table, apiClient, entityCollectionPath, open, on
                       placeholder={`Enter '${field.name}' value`}
                     />
                   ) : field.name === "password" ? (
-                    <Input
-                      id={field.name}
-                      type="password"
-                      value={formData[field.name] ?? ""}
-                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                      disabled={(field.type === "view" || isSystemGeneratedField(field))}
-                      className={`w-full ${(field.type === "view" || isSystemGeneratedField(field)) ? "bg-muted" : ""}`}
-                      placeholder={`Enter '${field.name}' value`}
-                    />
+                    <div className="space-y-2">
+                      <PasswordFieldInput
+                        id={field.name}
+                        value={formData[field.name] ?? ""}
+                        onChange={(next) => handleFieldChange(field.name, next)}
+                        disabled={field.type === "view" || isSystemGeneratedField(field)}
+                        className={field.type === "view" || isSystemGeneratedField(field) ? "bg-muted" : ""}
+                        placeholder={
+                          table.schema.type === "auth"
+                            ? "Optional — leave blank for OAuth-only users"
+                            : "Enter password"
+                        }
+                      />
+                      {table.schema.type === "auth" && (
+                        <p className="text-xs text-muted-foreground">
+                          Optional for auth entities. OAuth users may have no password.
+                        </p>
+                      )}
+                    </div>
                   ) : field.type === "date" ? (
                     <Input
                       id={field.name}

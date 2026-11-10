@@ -40,6 +40,59 @@ export interface SchemaRules {
   update: RuleConfig
 }
 
+/** Login methods and verification policy for auth-type entities (PATCH via schema `auth`). */
+export interface AuthMethods {
+  password: boolean
+  otp: boolean
+  oauth: boolean
+  requireEmailVerification: boolean
+}
+
+export const DEFAULT_AUTH_METHODS: AuthMethods = {
+  password: true,
+  otp: false,
+  oauth: false,
+  requireEmailVerification: false,
+}
+
+/**
+ * Normalize schema auth flags for UI/API use.
+ * Backward compatible: when `auth` is null/undefined (older schemas), password is ON
+ * and otp/oauth/requireEmailVerification are OFF — matching pre-method-flag password-only login.
+ */
+export function normalizeAuthMethods(auth?: Partial<AuthMethods> | null): AuthMethods {
+  if (auth == null) {
+    return { ...DEFAULT_AUTH_METHODS }
+  }
+
+  return {
+    // Missing password key on a partial auth object also defaults to ON.
+    password: auth.password ?? true,
+    otp: auth.otp ?? false,
+    oauth: auth.oauth ?? false,
+    requireEmailVerification: auth.requireEmailVerification ?? false,
+  }
+}
+
+export function authMethodLabel(method: keyof AuthMethods): string {
+  switch (method) {
+    case "otp":
+      return "Email sign-in codes"
+    case "oauth":
+      return "OAuth"
+    case "requireEmailVerification":
+      return "Require email verification"
+    case "password":
+    default:
+      return "Password login"
+  }
+}
+
+/** Public login-method flags for an auth entity. */
+export function entityAuthMethodsApi(entityName: string): string {
+  return `/api/v1/auth/${encodeURIComponent(entityName)}/methods`
+}
+
 export interface TableSchema {
   fields: TableField[]
   has_api: boolean
@@ -48,6 +101,8 @@ export interface TableSchema {
   rules: SchemaRules
   system: boolean
   type: "base" | "auth" | "view"
+  /** Present on auth entities: which login methods are enabled. */
+  auth?: AuthMethods
   sql?: string
 }
 

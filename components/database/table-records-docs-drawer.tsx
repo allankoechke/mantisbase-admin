@@ -149,14 +149,106 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
       <DocSectionHeading>Authentication</DocSectionHeading>
 
       <SimpleEndpointDoc
+        method="GET"
+        endpoint={`${authPrefix}/methods`}
+        description="Public. Returns login method flags plus requireEmailVerification. Fetch this before login/register screens."
+        requestExample={`curl "${baseUrl}${authPrefix}/methods"`}
+        responseExample={JSON.stringify(
+          {
+            status: 200,
+            data: { password: true, otp: false, oauth: false, requireEmailVerification: false },
+            error: "",
+          },
+          null,
+          2,
+        )}
+      />
+
+      <SimpleEndpointDoc
         method="POST"
         endpoint={`${authPrefix}/login`}
-        description="Authenticate against this auth entity and receive a JWT. Rate-limited to 5 attempts/minute per IP. No Bearer token required."
+        description="Password login with identity (email or user id) and password. Returns 403 when password is disabled or email verification is required and unfinished."
         requestExample={`curl -X POST "${baseUrl}${authPrefix}/login" \\
   -H "Content-Type: application/json" \\
   -d '{
   "identity": "user@example.com",
   "password": "your_password"
+}'`}
+        responseExample={JSON.stringify(
+          {
+            status: 200,
+            data: {
+              token: "eyJhbGciOiJIUzI1NiIs...",
+              user: {
+                id: "019c1b81-364b-7000-8120-b5416b2c42c2",
+                email: "user@example.com",
+                email_verified: true,
+              },
+            },
+            error: "",
+          },
+          null,
+          2,
+        )}
+        errors={[
+          { code: "400", message: "Bad Request — invalid credentials or OAuth-only account" },
+          { code: "403", message: "Method disabled, or verify email before signing in" },
+          { code: "404", message: "Not Found — entity not found or not auth-enabled" },
+          { code: "429", message: "Too Many Requests — rate limit exceeded" },
+        ]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/verify-email/request`}
+        description="Resend verification email. Always returns sent:true (including unknown/already-verified addresses). Needs SMTP and siteDomain."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/verify-email/request" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "email": "user@example.com" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { sent: true }, error: "" }, null, 2)}
+        errors={[
+          { code: "400", message: "Invalid email, SMTP missing, or siteDomain unset" },
+          { code: "429", message: "Rate limited" },
+          { code: "502", message: "Failed to send the verification email" },
+        ]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/verify-email`}
+        description="Complete verification with the token from the email link (app-owned verify page). GET with ?token= returns HTML instead."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/verify-email" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "token": "verification_token_from_link" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { verified: true }, error: "" }, null, 2)}
+        errors={[{ code: "400", message: "Invalid or expired verification link" }]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/otp/request`}
+        description="Request a 6-digit email sign-in code. Always returns sent:true (even for unknown emails). Requires auth.otp and SMTP."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/otp/request" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "email": "user@example.com" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { sent: true }, error: "" }, null, 2)}
+        errors={[
+          { code: "400", message: "Invalid email or SMTP not configured" },
+          { code: "403", message: "OTP login disabled" },
+          { code: "429", message: "Rate limited (IP or recipient)" },
+          { code: "502", message: "Failed to send the sign-in code" },
+        ]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/otp/login`}
+        description="Exchange email + 6-digit OTP for a JWT. Code lasts 10 minutes; 5 wrong attempts invalidate it."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/otp/login" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+  "email": "user@example.com",
+  "otp": "483920"
 }'`}
         responseExample={JSON.stringify(
           {
@@ -171,9 +263,10 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
           2,
         )}
         errors={[
-          { code: "400", message: "Bad Request — invalid credentials or input" },
-          { code: "404", message: "Not Found — entity not found or not auth-enabled" },
-          { code: "429", message: "Too Many Requests — rate limit exceeded" },
+          { code: "400", message: "Missing/invalid email or OTP format" },
+          { code: "401", message: "Invalid or expired sign-in code" },
+          { code: "403", message: "OTP login disabled" },
+          { code: "429", message: "Too Many Requests" },
         ]}
       />
 
@@ -298,7 +391,7 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
       <DocCollapsibleSection
         icon={<Shield className="h-4 w-4 text-muted-foreground" />}
         title="OAuth login & account linking"
-        description="Browser redirect flow (PKCE) and programmatic account management for enabled providers."
+        description="Only available when auth.oauth is true (see GET /methods). Browser redirect flow (PKCE) and account linking."
       >
         <div className="space-y-6">
           <div>
