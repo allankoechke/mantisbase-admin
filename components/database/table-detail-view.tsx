@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCw, Cog, FileText, Trash2, Search, Plus, Key, Mail, MoreHorizontal } from "lucide-react"
+import { RefreshCw, Cog, FileText, Trash2, Search, Plus, Key, KeyRound, Mail, MoreHorizontal } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -265,6 +265,45 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     }
   }
 
+  const handleSendPasswordResetEmail = async (row: { email?: string }) => {
+    const email = typeof row.email === "string" ? row.email.trim() : ""
+    if (!email) {
+      toast({
+        variant: "destructive",
+        title: "Email required",
+        description: "This user has no email address.",
+      })
+      return
+    }
+
+    try {
+      const response = await apiClient.call(
+        `/api/v1/auth/${encodeURIComponent(table.schema.name)}/password-reset/request`,
+        {
+          method: "POST",
+          body: JSON.stringify({ email }),
+        },
+      )
+      const error = getApiClientError(response)
+      if (error) {
+        throw new Error(error)
+      }
+
+      toast({
+        title: "Password Reset Email Requested",
+        description: "If an account exists for that email, we sent a password reset link.",
+        duration: 4000,
+      })
+    } catch (error) {
+      console.error("Failed to send password reset email:", error)
+      toast({
+        variant: "destructive",
+        title: "Could not send password reset",
+        description: error instanceof Error ? error.message : "Failed to send password reset email.",
+      })
+    }
+  }
+
   const handleCreateApiKeyForUser = (userId: string) => {
     openCreateApiKeyDialog(setCreateApiKeyForUserId, setCreateApiKeyRequested, userId)
     setActiveTab("api-keys")
@@ -437,6 +476,10 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
                             <DropdownMenuItem onClick={() => handleSendVerificationEmail(row)}>
                               <Mail className="mr-2 h-4 w-4" />
                               Send verification email
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSendPasswordResetEmail(row)}>
+                              <KeyRound className="mr-2 h-4 w-4" />
+                              Reset password
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

@@ -403,6 +403,133 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/{entity_name}/password-reset/request:
+    post:
+      tags: [Auth]
+      summary: Email a password reset link
+      description: |
+        Always returns `{ "sent": true }` for unknown addresses (no enumeration).
+        Requires SMTP and `siteDomain`. Link expires in 1 hour. Rate-limited like OTP
+        (5/min per IP; 3 emails/hour per recipient).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          sent:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid email, SMTP missing, or siteDomain unset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          description: Failed to send the password reset email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/{entity_name}/password-reset:
+    get:
+      tags: [Auth]
+      summary: Password reset form (HTML)
+      description: |
+        Opens from the reset email link (`?token=`). Shows a form to choose a new password.
+        Token lasts 1 hour and is single-use.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML password reset form
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Missing token
+    post:
+      tags: [Auth]
+      summary: Reset password with token (JSON)
+      description: |
+        App-owned or form submit flow. Body contains the token from the email link and the new password
+        (min 8 characters, no whitespace). Existing sessions for the account are invalidated.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EntityName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        "200":
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          reset:
+                            type: boolean
+                            example: true
+        "400":
+          description: Invalid/expired link or weak password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /auth/{entity_name}/refresh:
     post:
       tags: [Auth]
