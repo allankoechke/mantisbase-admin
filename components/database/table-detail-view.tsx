@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCw, Cog, FileText, Trash2, Search, Plus, Key, MoreHorizontal } from "lucide-react"
+import { RefreshCw, Cog, FileText, Trash2, Search, Plus, Key, Mail, MoreHorizontal } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,9 +11,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ApiClient, TableMetadata, buildEntityFileUrl, entityApiKeysApi } from "@/lib/api"
+import { ApiClient, TableMetadata, buildEntityFileUrl, entityApiKeysApi, getApiClientError } from "@/lib/api"
 import { toApiKeyUsers } from "@/lib/entity-users"
 import { ApiKeysPanel, openCreateApiKeyDialog } from "@/components/api-keys/api-keys-panel"
+import { useToast } from "@/hooks/use-toast"
 import { TableConfigDrawer } from "./table-config-drawer"
 import { TableRecordDocsDrawer } from "./table-records-docs-drawer"
 import { EditItemDrawer } from "./edit-item-drawer"
@@ -51,6 +52,7 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
   const [apiKeysReloadRequested, setApiKeysReloadRequested] = React.useState(0)
   const [apiKeysLoading, setApiKeysLoading] = React.useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
+  const { toast } = useToast()
 
   const isAuthEntity = table.schema.type === "auth"
   const entityUsers = React.useMemo(() => toApiKeyUsers(tableData), [tableData])
@@ -224,6 +226,45 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
     }
   }
 
+  const handleSendVerificationEmail = async (row: { email?: string }) => {
+    const email = typeof row.email === "string" ? row.email.trim() : ""
+    if (!email) {
+      toast({
+        variant: "destructive",
+        title: "Email required",
+        description: "This user has no email address.",
+      })
+      return
+    }
+
+    try {
+      const response = await apiClient.call(
+        `/api/v1/auth/${encodeURIComponent(table.schema.name)}/verify-email/request`,
+        {
+          method: "POST",
+          body: JSON.stringify({ email }),
+        },
+      )
+      const error = getApiClientError(response)
+      if (error) {
+        throw new Error(error)
+      }
+
+      toast({
+        title: "Verification Email Requested",
+        description: "If an account exists for that email, we sent a verification link.",
+        duration: 4000,
+      })
+    } catch (error) {
+      console.error("Failed to send verification email:", error)
+      toast({
+        variant: "destructive",
+        title: "Could not send verification",
+        description: error instanceof Error ? error.message : "Failed to send verification email.",
+      })
+    }
+  }
+
   const handleCreateApiKeyForUser = (userId: string) => {
     openCreateApiKeyDialog(setCreateApiKeyForUserId, setCreateApiKeyRequested, userId)
     setActiveTab("api-keys")
@@ -392,6 +433,10 @@ export function TableDetailView({ table, onBack, apiClient, onTableUpdate, onTab
                             <DropdownMenuItem onClick={() => handleCreateApiKeyForUser(row.id)}>
                               <Key className="mr-2 h-4 w-4" />
                               Create API Key
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSendVerificationEmail(row)}>
+                              <Mail className="mr-2 h-4 w-4" />
+                              Send verification email
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

@@ -224,9 +224,9 @@ export function AddTableDialog({ apiClient, onTablesUpdate, tables = [], childre
             name: "password",
             type: "string",
             primary_key: false,
-            nullable: false,
+            nullable: true,
             system: true,
-            required: true,
+            required: false,
             unique: false,
             constraints: {
               min_value: 6,

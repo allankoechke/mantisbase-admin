@@ -1,5 +1,6 @@
 import type { ApiClient, TableField, TableMetadata } from "@/lib/api"
 import { normalizeAuthMethods } from "@/lib/api"
+import { normalizeAuthSchemaField } from "@/lib/auth-fields"
 import {
   appendPrecisionToFieldPayload,
   normalizeFieldTypeForEditor,
@@ -26,7 +27,10 @@ export function normalizeTableSchema(table: TableMetadata): TableMetadata {
 
   const schema = {
     ...table.schema,
-    fields: table.schema.fields?.map(normalizeSchemaField) ?? table.schema.fields,
+    fields: table.schema.fields?.map((field) => {
+      const typed = normalizeSchemaField(field)
+      return normalizeAuthSchemaField(typed, table.schema.type)
+    }) ?? table.schema.fields,
   }
 
   // Older auth entities may omit `auth`; treat as password-only login.
