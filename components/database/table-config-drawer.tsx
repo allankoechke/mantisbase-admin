@@ -76,6 +76,32 @@ interface TableConfigDrawerProps {
 }
 */
 
+function transformFieldsForEditor(fields: TableMetadata["schema"]["fields"] | undefined) {
+  return (
+    fields?.map((col) => {
+      const normalized = normalizeFieldTypeForEditor(col)
+      return {
+        ...col,
+        type: normalized.type,
+        precision: normalized.precision,
+        old_name: col.name,
+        // Flatten constraints for UI
+        primaryKey: col.primary_key || false,
+        minValue: col.constraints?.min_value || null,
+        maxValue: col.constraints?.max_value || null,
+        defaultValue: col.constraints?.default_value || null,
+        validator: col.constraints?.validator || null,
+        foreign_key: col.foreign_key,
+      }
+    }) || []
+  )
+}
+
+function normalizeRuleMode(mode: string | undefined) {
+  // Convert empty string to "admin" for UI (Select doesn't allow empty string values)
+  return mode === "" || !mode ? "admin" : mode
+}
+
 // NOTE: We don't support changing of field names yet!
 export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpdate, onTablesUpdate, tables = [] }: TableConfigDrawerProps) {
   const [columns, setColumns] = React.useState<any[]>([])
@@ -103,6 +129,7 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
     normalizeAuthMethods(table.schema.auth),
   )
   const [savingAuthMethod, setSavingAuthMethod] = React.useState<keyof AuthMethods | null>(null)
+  const wasOpenRef = React.useRef(false)
   const { toast } = useToast()
   const navigate = useNavigate()
   const isAuthEntity = table.schema.type === "auth"
@@ -110,82 +137,66 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
   // Get unique key for field (use id if exists, otherwise generate one)
   const getFieldKey = (field: any, index: number) => field.id || `temp-${index}`
 
+  // Only hydrate drawer state when it opens. Parent table updates (auth toggles,
+  // schema saves) must not reset the active tab or feel like a close/reopen.
   React.useEffect(() => {
-    if (open) {
-      // Transform API format (with constraints) to UI format (flat camelCase)
-      const transformedColumns = table.schema?.fields.map(col => {
-        const normalized = normalizeFieldTypeForEditor(col)
-        return {
-          ...col,
-          type: normalized.type,
-          precision: normalized.precision,
-          old_name: col.name,
-          // Flatten constraints for UI
-          primaryKey: col.primary_key || false,
-          minValue: col.constraints?.min_value || null,
-          maxValue: col.constraints?.max_value || null,
-          defaultValue: col.constraints?.default_value || null,
-          validator: col.constraints?.validator || null,
-          // Include foreign_key if present
-          foreign_key: col.foreign_key,
+    const justOpened = open && !wasOpenRef.current
+    wasOpenRef.current = open
+    if (!justOpened) {
+      return
+    }
+
+    setColumns(transformFieldsForEditor(table.schema?.fields))
+    setRules({
+      list: {
+        mode: normalizeRuleMode(table.schema.rules?.list?.mode),
+        expr: table.schema.rules?.list?.expr || "",
+      },
+      get: {
+        mode: normalizeRuleMode(table.schema.rules?.get?.mode),
+        expr: table.schema.rules?.get?.expr || "",
+      },
+      add: {
+        mode: normalizeRuleMode(table.schema.rules?.add?.mode),
+        expr: table.schema.rules?.add?.expr || "",
+      },
+      update: {
+        mode: normalizeRuleMode(table.schema.rules?.update?.mode),
+        expr: table.schema.rules?.update?.expr || "",
+      },
+      delete: {
+        mode: normalizeRuleMode(table.schema.rules?.delete?.mode),
+        expr: table.schema.rules?.delete?.expr || "",
+      },
+    })
+    setAuthMethods(normalizeAuthMethods(table.schema.auth))
+    setActiveTab("schema")
+    setHasUnsavedChanges(false)
+    setExpandedFields(new Set())
+    setDeletedColumns([])
+
+    void (async () => {
+      try {
+        const fresh = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`)
+        if ((fresh as { error?: unknown[] })?.error?.length) {
+          return
         }
-      }) || []
-      setColumns(transformedColumns)
-      // Initialize rules with mode and expr from API
-      // Convert empty string to "admin" for UI (Select doesn't allow empty string values)
-      const normalizeMode = (mode: string | undefined) => {
-        return mode === "" || !mode ? "admin" : mode
-      }
-      setRules({
-        list: {
-          mode: normalizeMode(table.schema.rules?.list?.mode),
-          expr: table.schema.rules?.list?.expr || "",
-        },
-        get: {
-          mode: normalizeMode(table.schema.rules?.get?.mode),
-          expr: table.schema.rules?.get?.expr || "",
-        },
-        add: {
-          mode: normalizeMode(table.schema.rules?.add?.mode),
-          expr: table.schema.rules?.add?.expr || "",
-        },
-        update: {
-          mode: normalizeMode(table.schema.rules?.update?.mode),
-          expr: table.schema.rules?.update?.expr || "",
-        },
-        delete: {
-          mode: normalizeMode(table.schema.rules?.delete?.mode),
-          expr: table.schema.rules?.delete?.expr || "",
-        },
-      })
-      setAuthMethods(normalizeAuthMethods(table.schema.auth))
-      setActiveTab("schema")
-      setHasUnsavedChanges(false)
-      setExpandedFields(new Set())
-      setDeletedColumns([])
+        if (!schemaFieldsNeedMigration(fresh.schema?.fields ?? [])) {
+          return
+        }
 
-      void (async () => {
-        try {
-          const fresh = await apiClient.call<TableMetadata>(`/api/v1/schemas/${table.schema.name}`)
-          if ((fresh as { error?: unknown[] })?.error?.length) {
-            return
-          }
-          if (!schemaFieldsNeedMigration(fresh.schema?.fields ?? [])) {
-            return
-          }
-
-          const migrated = await migrateSchemaFieldsIfNeeded(apiClient, fresh)
-          if (migrated) {
-            onTableUpdate(migrated)
-          } else {
-            setHasUnsavedChanges(true)
-          }
-        } catch (error) {
-          console.error("Failed to migrate legacy field types:", error)
+        const migrated = await migrateSchemaFieldsIfNeeded(apiClient, fresh)
+        if (migrated) {
+          setColumns(transformFieldsForEditor(migrated.schema?.fields))
+          onTableUpdate(migrated)
+        } else {
           setHasUnsavedChanges(true)
         }
-      })()
-    }
+      } catch (error) {
+        console.error("Failed to migrate legacy field types:", error)
+        setHasUnsavedChanges(true)
+      }
+    })()
   }, [open, table, apiClient, onTableUpdate])
 
   const addColumn = () => {
@@ -346,6 +357,8 @@ export function TableConfigDrawer({ table, apiClient, open, onClose, onTableUpda
       if ((updatedTable as any)?.error?.length > 0) throw (updatedTable as any).error
 
       onTableUpdate(updatedTable)
+      setColumns(transformFieldsForEditor(updatedTable.schema?.fields))
+      setDeletedColumns([])
       setHasUnsavedChanges(false)
       toast({
         title: "Table Updated",
