@@ -151,6 +151,7 @@ For entities with `type: "auth"`:
 - Per-user “Create API Key” from row actions
 - **Login methods** — `auth.password` / `auth.otp` / `auth.oauth` on the schema (defaults: password on, OTP/OAuth off). Public apps read `GET /api/v1/auth/{entity}/methods`.
 - **Email verification** — `auth.requireEmailVerification` (default off). Auth records include system field `email_verified` (admin-editable). Apps use `/verify-email` and `/verify-email/request`.
+- **Password reset** — auth row actions can send a reset email via `/password-reset/request`. Users complete the flow with `/password-reset` (HTML form or JSON `{ token, password }`).
 - **OAuth providers** — shown under Auth only when `auth.oauth` is on; per-provider enablement via `enabled_for_entity`
 
 Auth / OAuth workflow:

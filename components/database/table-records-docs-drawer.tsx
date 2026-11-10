@@ -226,6 +226,32 @@ function AuthDocsSection({ entityName }: { entityName: string }) {
 
       <SimpleEndpointDoc
         method="POST"
+        endpoint={`${authPrefix}/password-reset/request`}
+        description="Email a password reset link. Always returns sent:true (including unknown addresses). Needs SMTP and siteDomain. Link expires in 1 hour."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/password-reset/request" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "email": "user@example.com" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { sent: true }, error: "" }, null, 2)}
+        errors={[
+          { code: "400", message: "Invalid email, SMTP missing, or siteDomain unset" },
+          { code: "429", message: "Rate limited" },
+          { code: "502", message: "Failed to send the password reset email" },
+        ]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
+        endpoint={`${authPrefix}/password-reset`}
+        description="Set a new password with the token from the email link. GET with ?token= shows an HTML form."
+        requestExample={`curl -X POST "${baseUrl}${authPrefix}/password-reset" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "token": "reset_token_from_link", "password": "new-secure-password" }'`}
+        responseExample={JSON.stringify({ status: 200, data: { reset: true }, error: "" }, null, 2)}
+        errors={[{ code: "400", message: "Invalid/expired link or weak password" }]}
+      />
+
+      <SimpleEndpointDoc
+        method="POST"
         endpoint={`${authPrefix}/otp/request`}
         description="Request a 6-digit email sign-in code. Always returns sent:true (even for unknown emails). Requires auth.otp and SMTP."
         requestExample={`curl -X POST "${baseUrl}${authPrefix}/otp/request" \\
